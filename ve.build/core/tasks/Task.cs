@@ -77,8 +77,16 @@ internal class Task
 		}
 	}
 
-	public void makeBuildNode(string key, string name, string[] dependencies, Action<IBuildContext> buildAction)
+	public void makeBuildNode(string key, string name, string[] dependencies, Func<IBuildContext, System.Threading.Tasks.Task> buildAction)
 	{
 		this.BuildNodes.Add(new DagNode(key, name, dependencies, buildAction));
+	}
+	public void makeBuildNode(string key, string name, string[] dependencies, Action<IBuildContext> buildAction)
+	{
+		this.makeBuildNode(key, name, dependencies, async ctx =>
+		{
+			buildAction(ctx);
+			await System.Threading.Tasks.Task.CompletedTask;
+		});
 	}
 }

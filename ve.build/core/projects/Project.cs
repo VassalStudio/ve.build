@@ -25,7 +25,7 @@ internal class Project
 		return this;
 	}
 
-	public void makeBuildNode(string key, string name, string[] dependencies, Action<IBuildContext> buildAction)
+	public void makeBuildNode(string key, string name, string[] dependencies, Func<IBuildContext, Task> buildAction)
 	{
 		this.BuildNode.Add(new DagNode(key, name, dependencies, buildAction));
 	}

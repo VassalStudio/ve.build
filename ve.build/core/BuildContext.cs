@@ -3,6 +3,7 @@ using ve.build.core.projects;
 
 namespace ve.build.core;
 
+using ve.build.core.platform;
 using ve.build.core.tasks;
 public enum LogLevel
 {
@@ -45,21 +46,24 @@ internal class BuildContext : IBuildContext
 	public string[] Args { get; private set; }
 	public LogLevel LogLevel { get; set; } = LogLevel.DEFAULT;
 	public Configuration Configuration { get; set; } = Configuration.DEFAULT;
+	public PlatformDesc Platform { get; set; }
 	private readonly Action<IBuildContext>[] Parameters;
 	private readonly KeyValuePair<string, string>[] ParamHelps;
-	internal BuildContext(KeyValuePair<string, TaskDescription>[] tasks, KeyValuePair<string, ProjectDescription>[] projects,
-		Action<IBuildContext>[] parameters, KeyValuePair<string, string>[] paramHelps)
+	internal BuildContext(KeyValuePair<string, TaskDescription>[] tasks,
+		KeyValuePair<string, ProjectDescription>[] projects,
+		Action<IBuildContext>[] parameters, KeyValuePair<string, string>[] paramHelps,
+		KeyValuePair<string, PlatformDesc>[] platforms)
 	{
 		this.Tasks = tasks;
 		this.Projects = projects;
 		this.Parameters = parameters;
 		this.ParamHelps = paramHelps;
+		this.Platform = platforms.FirstOrDefault(p => p.Value.Platform.Platform.IsCurrent).Value;
 	}
 
 	internal KeyValuePair<string, TaskDescription>[] Tasks { get; }
 	internal KeyValuePair<string, ProjectDescription>[] Projects { get; }
 	public bool ShouldPrintHelp { get; set; }
-	public ProjectDescription? SelectProject { get; set; }
 
 	public async System.Threading.Tasks.Task run(string[] args)
 	{
@@ -88,7 +92,7 @@ internal class BuildContext : IBuildContext
 		{
 			try
 			{
-				var task = taskDesc!.buildTask(this.Tasks.Select(t => t.Value).ToArray(), this);
+				var task = this.Platform.buildPlatform().buildTask(taskDesc!, this.Tasks.Select(t => t.Value).ToArray(), this);
 				var projectsDescs = this.Projects.Select(p => p.Value).ToArray();
 				var graph = task.buildGraph(projectsDescs.ToList());
 				await graph.build(this);

@@ -3,4 +3,6 @@ using ve.build.core.projects;
 
 await new HostBuilder().task("build", "Build sample task",
 	builder => builder.eachProject(pbuilder => pbuilder.buildAction("defaultAction", "Default Action", [], ctx => ctx.log(LogLevel.INFO, "BUILD", "Test Build"))))
-	.project("sample", PROJECT_TYPE.APPLICATION).build().run(args);
+	.project("sample", PROJECT_TYPE.APPLICATION, pbuilder => pbuilder.file("test.txt").copy())
+	.makePlatform("windows-x64", true, builder => {})
+	.build().run(args);

@@ -4,9 +4,9 @@ internal class DagNode
 {
 	public string Key { get; }
 	public string Name { get; }
-	public Action<IBuildContext> BuildAction { get; }
+	public Func<IBuildContext, Task> BuildAction { get; }
 	public List<string> Dependencies { get; } = new();
-	public DagNode(string key, string name, string[] dependencies, Action<IBuildContext> buildAction)
+	public DagNode(string key, string name, string[] dependencies, Func<IBuildContext, Task> buildAction)
 	{
 		this.Key = key;
 		this.Name = name;
