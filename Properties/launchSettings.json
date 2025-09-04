@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "ve.build": {
+      "commandName": "Project",
+      "commandLineArgs": "build"
+    }
+  }
+}
