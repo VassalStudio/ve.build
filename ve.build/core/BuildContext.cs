@@ -40,6 +40,7 @@ public interface IBuildContext
 	void log(LogLevel level, string category, string message);
 	void log(LogLevel level, string category, Exception ex);
 	System.Threading.Tasks.Task run(string[] args);
+	T getTool<T>() where T : ITool;
 }
 internal class BuildContext : IBuildContext
 {
@@ -49,6 +50,7 @@ internal class BuildContext : IBuildContext
 	public PlatformDesc Platform { get; set; }
 	private readonly Action<IBuildContext>[] Parameters;
 	private readonly KeyValuePair<string, string>[] ParamHelps;
+	private readonly Dictionary<Type, ITool> _tools = new();
 	internal BuildContext(KeyValuePair<string, TaskDescription>[] tasks,
 		KeyValuePair<string, ProjectDescription>[] projects,
 		Action<IBuildContext>[] parameters, KeyValuePair<string, string>[] paramHelps,
@@ -92,7 +94,12 @@ internal class BuildContext : IBuildContext
 		{
 			try
 			{
-				var task = this.Platform.buildPlatform().buildTask(taskDesc!, this.Tasks.Select(t => t.Value).ToArray(), this);
+				var platform = this.Platform.buildPlatform();
+				foreach (var tool in platform.DefaultTools)
+				{
+					this._tools[tool.Key] = tool.Value;
+				}
+				var task = platform.buildTask(taskDesc!, this.Tasks.Select(t => t.Value).ToArray(), this);
 				var projectsDescs = this.Projects.Select(p => p.Value).ToArray();
 				var graph = task.buildGraph(projectsDescs.ToList());
 				await graph.build(this);
@@ -103,6 +110,11 @@ internal class BuildContext : IBuildContext
 				this.log(LogLevel.FATAL, "BUILD", ex);
 			}
 		}
+	}
+
+	public T getTool<T>() where T : ITool
+	{
+		return (T)this._tools[typeof(T)] ?? throw new Exception($"Tool of type '{typeof(T).FullName}' not found.");
 	}
 
 	private void _printHelp()

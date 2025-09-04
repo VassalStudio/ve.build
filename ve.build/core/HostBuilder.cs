@@ -1,5 +1,4 @@
-﻿using System.Linq;
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
 using ve.build.core.platform;
 using ve.build.core.projects;
 using ve.build.core.tasks;
@@ -64,7 +63,7 @@ public class HostBuilder
 		return this;
 	}
 
-	public HostBuilder makePlatform(string name, bool isCurrent, Action<IPlatformBuilder> builder)
+	public HostBuilder platform(string name, bool isCurrent, Action<IPlatformBuilder> builder)
 	{
 		if (this._platforms.TryGetValue(name, out var value) == false)
 		{

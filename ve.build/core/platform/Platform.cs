@@ -8,6 +8,7 @@ internal class Platform
 	public string Name { get; }
 
 	public bool IsCurrent { get; }
+	public readonly Dictionary<Type, ITool> DefaultTools = new();
 	public Platform(string name, bool isCurrent)
 	{
 		this.Name = name;
@@ -17,5 +18,10 @@ internal class Platform
 	public Task buildTask(TaskDescription taskDesc, TaskDescription[] allTasks, IBuildContext context)
 	{
 		return taskDesc!.buildTask(allTasks, context);
+	}
+
+	public void makeTool(Type type, ITool tool)
+	{
+		this.DefaultTools[type] = tool;
 	}
 }
