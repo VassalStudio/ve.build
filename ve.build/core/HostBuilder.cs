@@ -16,11 +16,6 @@ public class HostBuilder
 		this.makeParam<Configuration>("config", Configuration.DEFAULT, (ctx, config) => (ctx as BuildContext)!.Configuration = config, str => Enum.Parse<Configuration>(str),
 			"Set the build configuration. Possible values: DEBUG, RELEASE");
 		this.makeParam("help", false, (ctx, value) => (ctx as BuildContext)!.ShouldPrintHelp = value, "Print help for the build tool");
-		this.makeParam<string?>("project", null, (ctx, value) =>
-		{
-			var build = (ctx as BuildContext)!;
-			build.SelectProject = value != null ? build.Projects.FirstOrDefault(p => p.Key == value).Value : null;
-		}, s => String.IsNullOrWhiteSpace(s) ? null : s, "Select a specific project to build");
 	}
 
 	public IBuildContext build()
