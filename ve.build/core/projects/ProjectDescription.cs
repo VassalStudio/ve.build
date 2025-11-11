@@ -1,23 +1,28 @@
-﻿namespace ve.build.core.projects;
+﻿using ve.build.core.tasks;
+
+namespace ve.build.core.projects;
 
 internal class ProjectDescription
 {
 	public string Name { get; }
-	public PROJECT_TYPE Type { get; }
 	public Action<IProjectBuilder>[] Builders { get; set; } = [];
 
 	public string Output { get; }
-	public ProjectDescription(string name, PROJECT_TYPE type, Action<IProjectBuilder> builder, string output)
+	public string Intermediate { get; }
+	public string Path { get; }
+	public ProjectDescription(string name, Action<IProjectBuilder> builder, string path)
 	{
 		this.Name = name;
-		this.Type = type;
 		this.Builders = [builder];
-		this.Output = output;
+		this.Output = System.IO.Path.Join(path, "bin");
+		this.Intermediate = System.IO.Path.Join(path, "obj");
+		this.Path = path;
 	}
 
-	public KeyValuePair<Project, Dictionary<string, bool>> buildProject(Action<IProjectBuilder>[] actions)
+	public KeyValuePair<Project, Dictionary<string, bool>> buildProject(Action<IProjectBuilder>[] actions,
+		ITaskBuilder taskBuilder, Func<FileType, string> getExtFunc)
 	{
-		var projectBuilder = new ProjectBuilder(this.Name, this.Type, this.Output);
+		var projectBuilder = new ProjectBuilder(taskBuilder, this.Name, this.Path, this.Output, this.Intermediate, getExtFunc);
 		foreach (var builder in this.Builders.Concat(actions))
 		{
 			builder(projectBuilder);

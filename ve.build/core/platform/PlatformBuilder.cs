@@ -1,14 +1,15 @@
-﻿namespace ve.build.core.platform;
+﻿using ve.build.core.projects;
+
+namespace ve.build.core.platform;
 
 public interface ITool
 {
 	string Name { get; }
-	string Type { get; }
-	void setup(IBuildContext ctx);
 }
 public interface IPlatformBuilder
 {
 	IPlatformBuilder makeTool<T>(T tool) where T : ITool;
+	IPlatformBuilder makeFileType(FileType fileType, string extension);
 }
 internal class PlatformBuilder : IPlatformBuilder
 {
@@ -21,6 +22,12 @@ internal class PlatformBuilder : IPlatformBuilder
 	public IPlatformBuilder makeTool<T>(T tool) where T : ITool
 	{
 		this.Platform.makeTool(typeof(T), tool);
+		return this;
+	}
+
+	public IPlatformBuilder makeFileType(FileType fileType, string extension)
+	{
+		this.Platform.Extensions[fileType] = extension;
 		return this;
 	}
 }

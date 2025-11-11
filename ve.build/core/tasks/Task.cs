@@ -8,9 +8,11 @@ internal class Task
 	private Task[] _dependencies;
 	public readonly Dictionary<string, string> _paramHelps = new();
 	public readonly List<DagNode> BuildNodes = new();
+	private readonly ITaskBuilder _builder;
 
-	public Task(string name, string description)
+	public Task(string name, string description, ITaskBuilder builder)
 	{
+		this._builder = builder;
 		this.Name = name;
 		this.Description = description;
 		this._dependencies = Array.Empty<Task>();
@@ -37,13 +39,13 @@ internal class Task
 	public string Description { get; }
 	public bool ShouldPrintHelp { get; set; }
 
-	public Dag buildGraph(List<ProjectDescription> projectsDescs)
+	public Dag buildGraph(List<ProjectDescription> projectsDescs, Func<FileType, string> getExtFunc)
 	{
 		Dictionary<Project, Dictionary<string, bool>> projects = new();
 		while (projectsDescs.Count > 0)
 		{
 			var built = projectsDescs[0].buildProject(this.ProjectActions
-				.Concat(this._dependencies.SelectMany(d => d.ProjectActions)).ToArray());
+				.Concat(this._dependencies.SelectMany(d => d.ProjectActions)).ToArray(), this._builder, getExtFunc);
 			projects.Add(built.Key, built.Value);
 			projectsDescs.RemoveAt(0);
 		}
@@ -52,7 +54,7 @@ internal class Task
 		{
 			project.Key.resolveDependencies(projects.Keys.ToArray(), project.Value);
 		}
-		return new Dag(this.BuildNodes.Concat(projects.SelectMany(p => p.Key.BuildNode)).ToArray());
+		return new Dag(this.BuildNodes.ToArray());
 	}
 
 	public void printHelp()
@@ -83,10 +85,10 @@ internal class Task
 	}
 	public void makeBuildNode(string key, string name, string[] dependencies, Action<IBuildContext> buildAction)
 	{
-		this.makeBuildNode(key, name, dependencies, async ctx =>
+		this.makeBuildNode(key, name, dependencies, ctx =>
 		{
 			buildAction(ctx);
-			await System.Threading.Tasks.Task.CompletedTask;
+			return System.Threading.Tasks.Task.CompletedTask;
 		});
 	}
 }

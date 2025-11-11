@@ -1,0 +1,1 @@
+int __stdcall WinMain(void*, void*, const char*, int) {}

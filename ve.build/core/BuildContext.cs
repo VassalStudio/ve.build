@@ -101,7 +101,7 @@ internal class BuildContext : IBuildContext
 				}
 				var task = platform.buildTask(taskDesc!, this.Tasks.Select(t => t.Value).ToArray(), this);
 				var projectsDescs = this.Projects.Select(p => p.Value).ToArray();
-				var graph = task.buildGraph(projectsDescs.ToList());
+				var graph = task.buildGraph(projectsDescs.ToList(), platform.getExt);
 				await graph.build(this);
 			}
 			catch(Exception ex)

@@ -1,21 +1,27 @@
 ﻿using ve.build.core.projects;
 
+using File = ve.build.core.files.File;
+
 namespace ve.build.core.tasks;
 
 public interface ITaskBuilder
 {
 	ITaskBuilder dependsOf(string name);
 	ITaskBuilder eachProject(Action<IProjectBuilder> builderAction);
-	ITaskBuilder buldAction(string key, string name, string[] dependencies, Action<IBuildContext> buildAction);
+	ITaskBuilder buildAction(string key, string name, string[] dependencies, Action<IBuildContext> buildAction);
+	ITaskBuilder buildAction(string key, string name, string[] dependencies, Func<IBuildContext, System.Threading.Tasks.Task> buildAction);
+	string Name { get; }
 }
 internal class TaskBuilder : ITaskBuilder
 {
 	private readonly List<string> _dependencies = new();
 	private readonly List<Action<IBuildContext>> _parameters = new();
 	private readonly Task _task;
+
+	public string Name => this._task.Name;
 	public TaskBuilder(string name, string description)
 	{
-		this._task = new Task(name, description);
+		this._task = new Task(name, description, this);
 		this.makeParam("help", false, (ctx, taskBuilder, value) => this._task.ShouldPrintHelp = value, "Print help for this task");
 	}
 	public ITaskBuilder dependsOf(string name)
@@ -30,11 +36,27 @@ internal class TaskBuilder : ITaskBuilder
 		return this;
 	}
 
-	public ITaskBuilder buldAction(string key, string name, string[] dependencies, Action<IBuildContext> buildAction)
+	public ITaskBuilder buildAction(string key, string name, string[] dependencies, Func<IBuildContext, System.Threading.Tasks.Task> buildAction)
 	{
 		this._task.makeBuildNode(key, name, dependencies, buildAction);
 		return this;
 	}
+
+	public ITaskBuilder buildAction(string key, string name, string[] dependencies, Action<IBuildContext> buildAction)
+	{
+		this._task.makeBuildNode(key, name, dependencies, buildAction);
+		return this;
+	}
+
+	public ITaskBuilder copy(File inputFile, File outputFile)
+	{
+		var key = $"copy:{inputFile.Path}:{outputFile.Path}";
+		this.buildAction(key, $"Copy {inputFile.Path} to {outputFile.Path}", inputFile.Dependencies,
+			ctx => System.IO.File.Copy(inputFile.Path, outputFile.Path, true));
+		outputFile.addDependencies(key);
+		return this;
+	}
+
 
 	public Task build(TaskDescription[] tasks, IBuildContext ctx)
 	{

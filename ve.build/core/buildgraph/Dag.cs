@@ -22,6 +22,20 @@ internal class Dag
 
 	public async Task build(IBuildContext ctx, int threads)
 	{
+#if DEBUG
+		var count = this.Nodes.Length;
+		while (this.Nodes.Length > 0)
+		{
+			var readyToBuild = this.Nodes.FirstOrDefault(n => n.Dependencies.Count == 0);
+			if (readyToBuild == null)
+			{
+				throw new Exception("Cyclic dependency detected in build graph");
+			}
+			await this._makeTask(ctx, readyToBuild);
+			ctx.log(LogLevel.INFO, "BUILD", $"[{count - this.Nodes.Length + 1}/{count}] {readyToBuild.Name}");
+			this.Nodes = this.Nodes.Where(n => n != readyToBuild).ToArray();
+		}
+#else
 		var count = this.Nodes.Length;
 		var completed = 0;
 		Dictionary<Task, DagNode> runningTasks = new();
@@ -55,10 +69,11 @@ internal class Dag
 			completed++;
 			ctx.log(LogLevel.INFO, "BUILD", $"[{completed}/{count}] {task.Value.Name}");
 		}
+#endif
 	}
 
-	private async Task _makeTask(IBuildContext ctx, DagNode node)
+	private Task _makeTask(IBuildContext ctx, DagNode node)
 	{
-		await node.BuildAction(ctx);
+		return node.BuildAction(ctx);
 	}
 }

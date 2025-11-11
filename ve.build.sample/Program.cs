@@ -1,8 +1,8 @@
 ﻿using ve.build.core;
-using ve.build.core.projects;
+using ve.build.cpp.cpp;
+using ve.build.link.link;
+using ve.build.msvc;
 
-await new HostBuilder().task("build", "Build sample task",
-	builder => builder.eachProject(pbuilder => pbuilder.buildAction("defaultAction", "Default Action", [], ctx => ctx.log(LogLevel.INFO, "BUILD", "Test Build"))))
-	.project("sample", PROJECT_TYPE.APPLICATION, pbuilder => pbuilder.file("test.txt").copy())
-	.platform("windows-x64", true, builder => {})
-	.build().run(args);
+await new HostBuilder()
+	.project("sample", pbuilder => pbuilder.Type(ProjectType.EXE).Sources())
+	.useMsvcToolchain().build().run(args);

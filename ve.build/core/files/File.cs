@@ -2,37 +2,29 @@
 
 namespace ve.build.core.files;
 
-public interface IFileHanle
+public class File
 {
-	IFileHanle copy();
-	IFileHanle copy(string outputPath);
-}
-internal class File : IFileHanle
-{
-	private readonly IProjectBuilder _builder;
 	private readonly string _path;
-	private readonly string _basePath;
-	private readonly string[] _dependencies;
+	private string[] _dependencies;
+	private readonly Func<FileType, string> _extensionGetter;
 
-	public File(IProjectBuilder builder, string path, string basePath, string[] dependencies)
+	public File(string path, Func<FileType, string> extentionGetter)
 	{
-		this._builder = builder;
 		this._path = path;
-		this._basePath = basePath;
-		this._dependencies = dependencies;
-	}
-	public IFileHanle copy(string outputPath)
-	{
-		var fullPath = Path.Join(this._basePath, this._path);
-		var output = Path.Join(outputPath, this._path)!;
-		var key = $"copy:{fullPath}";
-		this._builder.buildAction(key, $"Copy {this._path} to {output}", this._dependencies,
-			ctx => System.IO.File.Copy(fullPath, output, true));
-		return new File(this._builder, this._path, output, [key]);
+		this._dependencies = [];
+		this._extensionGetter = extentionGetter;
 	}
 
-	public IFileHanle copy()
+	public string Path => this._path;
+	public string[] Dependencies => this._dependencies;
+
+	public void addDependencies(params string[] deps)
 	{
-		return this.copy(this._builder.OutputPath);
+		this._dependencies = this._dependencies.Concat(deps).ToArray();
+	}
+
+	public File changeExtension(FileType type)
+	{
+		return new File(System.IO.Path.ChangeExtension(this.Path, this._extensionGetter(type)), this._extensionGetter);
 	}
 }

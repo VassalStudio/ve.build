@@ -5,6 +5,7 @@ using ve.build.core.tasks;
 
 namespace ve.build.core;
 
+
 public class HostBuilder
 {
 	private readonly Dictionary<string, TaskDescription> _tasks = new();
@@ -20,8 +21,10 @@ public class HostBuilder
 			"Set the build configuration. Possible values: DEBUG, RELEASE");
 		this.makeParam("help", false, (ctx, value) => (ctx as BuildContext)!.ShouldPrintHelp = value, "Print help for the build tool");
 		this.makeParam<string>("platform", "windows-x64",
-			(ctx, platform) => (ctx as BuildContext)!.Platform = this._platforms[platform], s => s, 
-			"Set the target platform. Example: windows-x64, linux-x64, osx-x64, etc");
+			(ctx, platform) => (ctx as BuildContext)!.Platform = this._platforms.TryGetValue(platform, out var p) ? p : throw new ArgumentException($"Platform '{platform}' not found."),
+			s => s, "Set the target platform. Example: windows-x64, linux-x64, osx-x64, etc").task("build", "Build sample task")
+			.task("generateProjectFiles", "Generate project files task").task("clean", "Clean build artifacts task")
+			.task("rebuild", "Rebuild task", ctx => ctx.dependsOf("clean").dependsOf("build"));
 	}
 
 	public IBuildContext build()
@@ -48,17 +51,17 @@ public class HostBuilder
 		return this.task(name, description, builder => { });
 	}
 
-	public HostBuilder project(string name, PROJECT_TYPE type)
+	public HostBuilder project(string name)
 	{
-		return this.project(name, type, builder => { });
+		return this.project(name, builder => { });
 	}
-	public HostBuilder project(string name, PROJECT_TYPE type, Action<IProjectBuilder> builder, [CallerFilePath]string? path = null)
+	public HostBuilder project(string name, Action<IProjectBuilder> builder, [CallerFilePath]string? path = null)
 	{
 		if (this._projects.ContainsKey(name))
 		{
 			throw new ArgumentException($"Project with name '{name}' already exists.");
 		}
-		var projectDesc = new ProjectDescription(name, type, builder, Path.Join(Path.GetDirectoryName(path), "bin"));
+		var projectDesc = new ProjectDescription(name, builder, Path.GetDirectoryName(path)!);
 		this._projects[name] = projectDesc;
 		return this;
 	}
