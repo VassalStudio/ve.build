@@ -6,4 +6,5 @@ namespace ve.build.cpp.cpp;
 public interface ICppTool : ITool
 {
 	IClConfigurator compile(File file, File obj);
+	IScanDependenciesConfigurator scanDependencies(File inFile, File obj);
 }

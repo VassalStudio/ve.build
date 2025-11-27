@@ -1,13 +1,31 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/VassalStudio/ve.build</RepositoryUrl>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <PackageId>VEBuild.Cpp</PackageId>
+    <Title>ve.build.cpp</Title>
+    <Version>1.0.0.0-rc</Version>
+    <Authors>VassalStudio</Authors>
+    <Description>VEBuild is a modular .NET build system that composes projects via declarative tasks, extensions, and platforms.  
+This repo contains the core abstractions and a sandbox used to validate the architecture.</Description>
+    <Copyright>© 2025 **VassalStudio**. All rights reserved.</Copyright>
+    <PackageProjectUrl>https://github.com/VassalStudio/ve.build</PackageProjectUrl>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\ve.build\ve.build.csproj" />
+    <PackageReference Include="VEBuild.Core" Version="1.0.0-rc" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
   </ItemGroup>
 
 </Project>

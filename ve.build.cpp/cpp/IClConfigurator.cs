@@ -1,4 +1,5 @@
 ﻿using ve.build.core;
+using ve.build.core.tasks;
 
 namespace ve.build.cpp.cpp;
 
@@ -75,6 +76,7 @@ public enum DebugInformationFormat
 
 public interface IClConfigurator
 {
+	string[] Args { get; }
 	IClConfigurator optimization(OptimizationLevel level);
 	IClConfigurator inlineLevel(InlineLevel level);
 	IClConfigurator enableIntrinsic(bool enable);
@@ -108,5 +110,13 @@ public interface IClConfigurator
 	IClConfigurator structPacking(int packing);
 	IClConfigurator throwingNew(bool enable);
 	IClConfigurator openMP(bool enable);
-	Task run(IBuildContext ctx);
+	Task<ActionResult> run(IBuildContext ctx);
+	IClConfigurator module(string modulePath);
+}
+
+public interface IScanDependenciesConfigurator : IClConfigurator
+{
+	string[] Dependencies { get; }
+	string[] Includes { get; }
+	IReadOnlyDictionary<string, string> ProvidedDeps { get; }
 }
