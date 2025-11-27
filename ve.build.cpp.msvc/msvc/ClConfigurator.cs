@@ -1,14 +1,43 @@
 ﻿using System.Diagnostics;
 using ve.build.core;
 using ve.build.core.projects;
+using ve.build.core.tasks;
 using ve.build.cpp.cpp;
 using File = ve.build.core.files.File;
 
 namespace ve.build.cpp.msvc.msvc;
 
-internal class ClConfigurator : IClConfigurator
+internal class BaseConfigurator : IClConfigurator
 {
 	private string[] _args = [];
+	private static readonly string[] _moduleExtensions = [".ixx", ".mxx"];
+
+	protected BaseConfigurator(string clPath, File file, File outFile, Action<IClConfigurator> configurator)
+	{
+		this.Path = clPath;
+		this.File = file;
+		this.ObjFile = outFile;
+		this.optimization(OptimizationLevel.NONE).inlineLevel(InlineLevel.NONE).enableIntrinsic(true)
+			.splitSections(true).securityCheckers(true).rtti(true).favorOptimization(FavorOptimization.NONE)
+			.exceptionHandling(ExceptionHandling.BOTH).extraFlags("/EHr").floatModel(FloatModel.PRECISE)
+			.floatExceptions(false).floatContract(false).fastTranscendentals(false).linkTimeCodeGeneration(false)
+			.extraFlags("/volatile:iso").stackCheck(false).addressSanitizer(false).arch(SSEArch.NONE)
+			.vectorLength(VectorLength.AUTO).languageStandard(
+				System.IO.Path.GetExtension(file.Path) switch
+				{
+					".cpp" or ".cxx" or ".cc" or ".c++" or ".ixx" or ".mxx" => LanguageStandard.CppLatest,
+					".c" => LanguageStandard.CLatest,
+					_ => throw new ArgumentOutOfRangeException()
+				}).constexprBacktrace().constexprDepth().constexprSteps()
+			.debugInformationFormat(DebugInformationFormat.EXTERNAL).throwingNew(true).openMP(false)
+			.extraFlags("/nologo")
+			.extraFlags("/c").extraFlags(file.Path).extraFlags($"/Fo{outFile.Path}").extraFlags($"/Fd{System.IO.Path.ChangeExtension(outFile.Path, ".pdb")}").macro("dllexport", "__declspec(dllexport)");
+		if (_moduleExtensions.Any(ext => ext == System.IO.Path.GetExtension(file.Path)))
+		{
+			this.extraFlags($"/ifcOutput{outFile.changeExtension(FileType.MODULE_INTERFACE).Path}");
+		}
+		configurator(this);
+	}
 
 	private IClConfigurator _selectArgs<T>(T value, Dictionary<T, string?> map) where T : notnull
 	{
@@ -22,40 +51,15 @@ internal class ClConfigurator : IClConfigurator
 		}
 		return this;
 	}
-	public ClConfigurator(string clPath, File file, File objFile, Action<IClConfigurator> configurator)
-	{
-		this.Path = clPath;
-		this.File = file;
-		this.ObjFile = objFile;
-		if (Directory.Exists(System.IO.Path.GetDirectoryName(objFile.Path)) == false)
-		{
-			Directory.CreateDirectory(System.IO.Path.GetDirectoryName(objFile.Path)!);
-		}
-		this.optimization(OptimizationLevel.NONE).inlineLevel(InlineLevel.NONE).enableIntrinsic(true)
-			.splitSections(true).securityCheckers(true).rtti(true).favorOptimization(FavorOptimization.NONE)
-			.exceptionHandling(ExceptionHandling.BOTH).extraFlags("/EHr").floatModel(FloatModel.PRECISE)
-			.floatExceptions(false).floatContract(false).fastTranscendentals(false).linkTimeCodeGeneration(false)
-			.extraFlags("/volatile:iso").stackCheck(false).addressSanitizer(false).arch(SSEArch.NONE)
-			.vectorLength(VectorLength.AUTO).extraFlags($"/Fd{System.IO.Path.ChangeExtension(objFile.Path, ".pdb")}")
-			.extraFlags("/c").extraFlags($"/Fo{objFile.Path}").languageStandard(
-				System.IO.Path.GetExtension(file.Path) switch
-				{
-					".cpp" or ".cxx" or ".cc" or ".c++" => LanguageStandard.CppLatest,
-					".c" => LanguageStandard.CLatest,
-					_ => throw new ArgumentOutOfRangeException()
-				}).constexprBacktrace().constexprDepth().constexprSteps()
-			.debugInformationFormat(DebugInformationFormat.EXTERNAL).throwingNew(true).openMP(false)
-			.extraFlags("/nologo").extraFlags(file.Path);
-		configurator(this);
-	}
-
-	public File ObjFile { get; }
 	public File File { get; }
 	public string Path { get; }
+	public File ObjFile { get; }
+	public string[] Args => this._args;
 
-	public async Task run(IBuildContext ctx)
+	public virtual async Task<ActionResult> run(IBuildContext ctx)
 	{
 		var pi = new ProcessStartInfo(this.Path, this._args);
+		ctx.log(LogLevel.VERBOSE, "MSVC", this.Path + " " + string.Join(' ', this.Args));
 		pi.RedirectStandardOutput = true;
 		pi.RedirectStandardError = true;
 		pi.UseShellExecute = false;
@@ -77,6 +81,12 @@ internal class ClConfigurator : IClConfigurator
 			if (s.Trim() == System.IO.Path.GetFileName(this.File.Path)) continue;
 			ctx.log(s.Contains("fatal error") ? LogLevel.FATAL : (s.Contains("error") ? LogLevel.ERROR : (s.Contains("warning") ? LogLevel.WARN : LogLevel.INFO)), "MSVC", s);
 		}
+		return process.ExitCode == 0 ? ActionResult.SUCCESS : ActionResult.FAILURE;
+	}
+
+	public IClConfigurator module(string modulePath)
+	{
+		return this.extraFlags($"/reference{modulePath}");
 	}
 
 	public IClConfigurator optimization(OptimizationLevel level)
@@ -372,5 +382,84 @@ internal class ClConfigurator : IClConfigurator
 			[true] = "/openmp:llvm",
 			[false] = "/openmp-"
 		});
+	}
+}
+internal class ClConfigurator : BaseConfigurator
+{
+	public ClConfigurator(string clPath, File file, File objFile, Action<IClConfigurator> configurator) : base(clPath, file, objFile, configurator)
+	{
+		if (Directory.Exists(System.IO.Path.GetDirectoryName(objFile.Path)) == false)
+		{
+			Directory.CreateDirectory(System.IO.Path.GetDirectoryName(objFile.Path)!);
+		}
+	}
+}
+
+internal class ShowDependenciesConfigurator : BaseConfigurator, IScanDependenciesConfigurator
+{
+	private readonly List<string> _dependencies = [];
+	private readonly Dictionary<string, string> _providedDependencies = new();
+	private readonly List<string> _includes = [];
+	public ShowDependenciesConfigurator(string clPath, File file, File outFile, Action<IClConfigurator> configurator) : base(clPath, file, outFile, configurator)
+	{
+		this.extraFlags("/scanDependencies-").extraFlags("/showIncludes");
+	}
+
+	public string[] Dependencies => this._dependencies.ToArray();
+	public string[] Includes => this._includes.ToArray();
+
+	public IReadOnlyDictionary<string, string> ProvidedDeps => this._providedDependencies;
+
+	public override async Task<ActionResult> run(IBuildContext ctx)
+	{
+		var pi = new ProcessStartInfo(this.Path, this.Args);
+		ctx.log(LogLevel.VERBOSE, "MSVC", this.Path + " " + string.Join(' ', this.Args));
+		pi.RedirectStandardOutput = true;
+		pi.RedirectStandardError = true;
+		pi.UseShellExecute = false;
+		pi.CreateNoWindow = true;
+		using var process = Process.Start(pi);
+		await process!.WaitForExitAsync();
+		var output = await process.StandardOutput.ReadToEndAsync();
+		var error = await process.StandardError.ReadToEndAsync();
+		if (process.ExitCode != 0)
+		{
+			ctx.log(LogLevel.ERROR, "MSVC", "Compilation failed:");
+			foreach (var s in error.Split("\n").Where(s => string.IsNullOrWhiteSpace(s) == false))
+			{
+				if (s.Trim() == System.IO.Path.GetFileName(this.File.Path)) continue;
+				ctx.log(LogLevel.ERROR, "MSVC", s);
+			}
+		}
+		else
+		{
+			foreach (var s in error.Split("\n").Where(s => string.IsNullOrWhiteSpace(s) == false))
+			{
+				ctx.log(LogLevel.VERBOSE, "MSVC", s);
+				if (s.Trim() == System.IO.Path.GetFileName(this.File.Path)) continue;
+				if (s.StartsWith("Note: including file:"))
+				{
+					var dep = s.Replace("Note: including file:", "").Trim();
+					ctx.log(LogLevel.DEBUG, "MSVC", $"Detected include file: {dep}");
+					this._includes.Add(dep);
+				}
+			}
+			foreach (var s in output.Split("\n").Where(s => string.IsNullOrWhiteSpace(s) == false))
+			{
+				ctx.log(LogLevel.VERBOSE, "MSVC", s);
+			}
+			var deps = Dependency.FromJson(output);
+			foreach (var dep in deps.Rules.SelectMany(r => r.Requires).Select(r => r.LogicalName))
+			{
+				ctx.log(LogLevel.DEBUG, "MSVC", $"Detected dependency module: {dep}");
+				this._dependencies.Add(dep);
+			}
+			foreach (var dep in deps.Rules.SelectMany(r => r.Provides).Select(r => r.LogicalName))
+			{
+				ctx.log(LogLevel.DEBUG, "MSVC", $"Provided dependency module: {dep} at path {this.File.Path}");
+				this._providedDependencies.Add(dep, this.File.Path);
+			}
+		}
+		return process.ExitCode == 0 ? ActionResult.SUCCESS : ActionResult.FAILURE;
 	}
 }

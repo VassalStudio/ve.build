@@ -20,6 +20,11 @@ public class MsvcTool : ICppTool
 		return new ClConfigurator(this.ClPath, file, obj, Configurator);
 	}
 
+	public IScanDependenciesConfigurator scanDependencies(File inFile, File obj)
+	{
+		return new ShowDependenciesConfigurator(this.ClPath, inFile, obj, this.Configurator);
+	}
+
 	public string Name => "msvc";
 
 }

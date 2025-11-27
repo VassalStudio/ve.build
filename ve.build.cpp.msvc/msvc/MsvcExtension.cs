@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using System.Runtime.InteropServices;
 using ve.build.core;
+using ve.build.core.platform;
 using ve.build.core.projects;
 using ve.build.cpp.cpp;
 using File = System.IO.File;
@@ -29,23 +30,27 @@ public static class MsvcExtension
 				Architecture.Arm64 => "HostARM64",
 				_ => throw new ArgumentOutOfRangeException()
 			};
+			var files = (IPlatformBuilder build) =>
+			{
+				build.makeFileType(FileType.OBJECT, ".obj").makeFileType(FileType.MODULE_INTERFACE, ".ifc");
+			};
 			if (x86_x64 != null)
 			{
 				builder.platform("windows-x64", RuntimeInformation.OSArchitecture == Architecture.X64,
-					wbuild => wbuild.makeTool<ICppTool>(new MsvcTool(Path.Join(x86_x64, "bin", host, "x64", "cl.exe"), clConfigurator)).makeFileType(FileType.OBJECT, ".obj"))
+					wbuild => files(wbuild.makeTool<ICppTool>(new MsvcTool(Path.Join(x86_x64, "bin", host, "x64", "cl.exe"), clConfigurator))))
 					.platform("windows-x86", RuntimeInformation.OSArchitecture == Architecture.X86,
-						wbuild => wbuild.makeTool<ICppTool>(new MsvcTool(Path.Join(x86_x64, "bin", host, "x86", "cl.exe"), clConfigurator)).makeFileType(FileType.OBJECT, ".obj"))
+						wbuild => files(wbuild.makeTool<ICppTool>(new MsvcTool(Path.Join(x86_x64, "bin", host, "x86", "cl.exe"), clConfigurator))))
 					.platform("efi-x64", false,
-						ebuild => ebuild.makeTool<ICppTool>(new MsvcTool(Path.Join(x86_x64, "bin", host, "x64", "cl.exe"), clConfigurator)).makeFileType(FileType.OBJECT, ".obj"))
+						ebuild => files(ebuild.makeTool<ICppTool>(new MsvcTool(Path.Join(x86_x64, "bin", host, "x64", "cl.exe"), clConfigurator))))
 					.platform("efi-x86", false,
-						ebuild => ebuild.makeTool<ICppTool>(new MsvcTool(Path.Join(x86_x64, "bin", host, "x86", "cl.exe"), clConfigurator)).makeFileType(FileType.OBJECT, ".obj"));
+						ebuild => files(ebuild.makeTool<ICppTool>(new MsvcTool(Path.Join(x86_x64, "bin", host, "x86", "cl.exe"), clConfigurator))));
 			}
 			if (arm64 != null)
 			{
 				builder.platform("windows-arm64", RuntimeInformation.OSArchitecture == Architecture.Arm64,
-					wbuild => wbuild.makeTool<ICppTool>(new MsvcTool(Path.Join(arm64, "bin", host, "arm64", "cl.exe"), clConfigurator)).makeFileType(FileType.OBJECT, ".obj"))
+					wbuild => files(wbuild.makeTool<ICppTool>(new MsvcTool(Path.Join(arm64, "bin", host, "arm64", "cl.exe"), clConfigurator))))
 					.platform("efi-arm64", false,
-						ebuild => ebuild.makeTool<ICppTool>(new MsvcTool(Path.Join(arm64, "bin", host, "arm64", "cl.exe"), clConfigurator)).makeFileType(FileType.OBJECT, ".obj"));
+						ebuild => files(ebuild.makeTool<ICppTool>(new MsvcTool(Path.Join(arm64, "bin", host, "arm64", "cl.exe"), clConfigurator))));
 			}
 		}
 		return builder;
