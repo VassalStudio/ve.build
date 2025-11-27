@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using ve.build.core;
+using ve.build.core.tasks;
 using ve.build.link.link;
 
 using File = ve.build.core.files.File;
@@ -11,15 +12,14 @@ internal class MsvcLibConfigurator : ILibConfigurator
 	public MsvcLibConfigurator(string libPath, string libsDir, string subsystem, File file, File[] objs, Action<ILibConfigurator> configurator)
 	{
 		this.LibPath = libPath;
-		this.extraFlag($"/OUT:{file.Path}").extraFlag("/nologo");
-		foreach (var obj in objs)
-		{
-			this.extraFlag(obj.Path);
-		}
-		this.extraFlag($"/LIBPATH:{libsDir}").extraFlag($"/SUBSYSTEM:{subsystem}");
+		this.extraFlag($"/OUT:{file.Path}").extraFlag("/nologo").extraFlag("/INCREMENTAL:NO").extraFlag($"/LIBPATH:{libsDir}").extraFlag($"/SUBSYSTEM:{subsystem}");
 		if (Path.GetExtension(file.Path) == ".dll")
 		{
 			this.extraFlag("/DLL");
+		}
+		foreach (var obj in objs)
+		{
+			this.extraFlag(obj.Path);
 		}
 		configurator(this);
 	}
@@ -27,6 +27,8 @@ internal class MsvcLibConfigurator : ILibConfigurator
 	public string LibPath { get; }
 
 	private string[] _arguments = [];
+	public string[] Args => this._arguments;
+
 	public ILibConfigurator extraFlag(string flag)
 	{
 		this._arguments = this._arguments.Append(flag).ToArray();
@@ -39,9 +41,10 @@ internal class MsvcLibConfigurator : ILibConfigurator
 		return this;
 	}
 
-	public async Task run(IBuildContext ctx)
+	public async Task<ActionResult> run(IBuildContext ctx)
 	{
 		var pi = new ProcessStartInfo(this.LibPath, this._arguments);
+		ctx.log(LogLevel.VERBOSE, "MSVC", this.LibPath + " " + string.Join(' ', this._arguments));
 		pi.RedirectStandardOutput = true;
 		pi.RedirectStandardError = true;
 		pi.UseShellExecute = false;
@@ -63,6 +66,7 @@ internal class MsvcLibConfigurator : ILibConfigurator
 			if (s.Trim() == System.IO.Path.GetFileName(this.LibPath)) continue;
 			ctx.log(s.Contains("fatal error") ? LogLevel.FATAL : (s.Contains("error") ? LogLevel.ERROR : (s.Contains("warning") ? LogLevel.WARN : LogLevel.INFO)), "MSVC", s);
 		}
+		return process.ExitCode == 0 ? ActionResult.SUCCESS : ActionResult.FAILURE;
 	}
 }
 
