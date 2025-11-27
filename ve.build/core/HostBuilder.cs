@@ -22,9 +22,11 @@ public class HostBuilder
 		this.makeParam("help", false, (ctx, value) => (ctx as BuildContext)!.ShouldPrintHelp = value, "Print help for the build tool");
 		this.makeParam<string>("platform", "windows-x64",
 			(ctx, platform) => (ctx as BuildContext)!.Platform = this._platforms.TryGetValue(platform, out var p) ? p : throw new ArgumentException($"Platform '{platform}' not found."),
-			s => s, "Set the target platform. Example: windows-x64, linux-x64, osx-x64, etc").task("build", "Build sample task")
-			.task("generateProjectFiles", "Generate project files task").task("clean", "Clean build artifacts task")
-			.task("rebuild", "Rebuild task", ctx => ctx.dependsOf("clean").dependsOf("build"));
+			s => s, "Set the target platform. Example: windows-x64, linux-x64, osx-x64, etc").task("build", "Build sample task");
+		this.makeParam<ProjectDescription?>("project", null, (ctx, project) => (ctx as BuildContext)!.SelectedProject = project,
+			s => this._projects.TryGetValue(s, out var value) ? value : null, "Specify a project to build. If not specified, all projects will be built.");
+		this.task("generateProjectFiles", "Generate project files task").task("clean", "Clean build artifacts task");
+		this.task("rebuild", "Rebuild task", ctx => ctx.dependsOf("clean").dependsOf("build"));
 	}
 
 	public IBuildContext build()
@@ -84,8 +86,9 @@ public class HostBuilder
 	{
 		this._parameters.Add(context =>
 		{
-			var value = context.Args.FirstOrDefault(arg => arg.StartsWith($"--{name}="));
-			builder(context, value != null ? converter(value.Remove(0, $"--{name}".Length)) : defaultValue);
+			var value = context.Args.FirstOrDefault(arg => arg.StartsWith($"--{name}="))?.Remove(0, $"--{name}=".Length);
+			builder(context, value != null ? converter(value) : defaultValue);
+			context.log(LogLevel.DEBUG, "PARAM", $"--{name}={(value == null ? defaultValue : value)}");
 		});
 		this._paramHelps[name] = description + $" (default: {defaultValue})";
 		return this;
@@ -94,7 +97,15 @@ public class HostBuilder
 	public HostBuilder makeParam(string name, bool defaultValue, Action<IBuildContext, bool> builder,
 		string description)
 	{
-		this._parameters.Add(context => builder(context, context.Args.Contains($"--{name}")));
+		this._parameters.Add(context =>
+		{
+			bool value = context.Args.Contains($"--{name}");
+			builder(context, value);
+			if (value)
+			{
+				context.log(LogLevel.DEBUG, "PARAM", $"--{name}");
+			}
+		});
 		this._paramHelps[name] = description + $" (default: {defaultValue})";
 		return this;
 	}

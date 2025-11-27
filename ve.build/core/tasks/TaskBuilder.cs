@@ -4,13 +4,20 @@ using File = ve.build.core.files.File;
 
 namespace ve.build.core.tasks;
 
+public enum ActionResult
+{
+	SKIP,
+	SUCCESS,
+	FAILURE
+}
 public interface ITaskBuilder
 {
 	ITaskBuilder dependsOf(string name);
 	ITaskBuilder eachProject(Action<IProjectBuilder> builderAction);
-	ITaskBuilder buildAction(string key, string name, string[] dependencies, Action<IBuildContext> buildAction);
-	ITaskBuilder buildAction(string key, string name, string[] dependencies, Func<IBuildContext, System.Threading.Tasks.Task> buildAction);
+	ITaskBuilder buildAction(string key, string name, Func<IEnumerable<string>> dependencies, Func<IBuildContext, ActionResult> buildAction);
+	ITaskBuilder buildAction(string key, string name, Func<IEnumerable<string>> dependencies, Func<IBuildContext, Task<ActionResult>> buildAction);
 	string Name { get; }
+	IBuildContext BuildContext { get; }
 }
 internal class TaskBuilder : ITaskBuilder
 {
@@ -19,10 +26,13 @@ internal class TaskBuilder : ITaskBuilder
 	private readonly Task _task;
 
 	public string Name => this._task.Name;
-	public TaskBuilder(string name, string description)
+	public IBuildContext BuildContext { get; }
+
+	public TaskBuilder(string name, string description, IBuildContext buildContext)
 	{
 		this._task = new Task(name, description, this);
 		this.makeParam("help", false, (ctx, taskBuilder, value) => this._task.ShouldPrintHelp = value, "Print help for this task");
+		this.BuildContext = buildContext;
 	}
 	public ITaskBuilder dependsOf(string name)
 	{
@@ -36,13 +46,13 @@ internal class TaskBuilder : ITaskBuilder
 		return this;
 	}
 
-	public ITaskBuilder buildAction(string key, string name, string[] dependencies, Func<IBuildContext, System.Threading.Tasks.Task> buildAction)
+	public ITaskBuilder buildAction(string key, string name, Func<IEnumerable<string>> dependencies, Func<IBuildContext, Task<ActionResult>> buildAction)
 	{
 		this._task.makeBuildNode(key, name, dependencies, buildAction);
 		return this;
 	}
 
-	public ITaskBuilder buildAction(string key, string name, string[] dependencies, Action<IBuildContext> buildAction)
+	public ITaskBuilder buildAction(string key, string name, Func<IEnumerable<string>> dependencies, Func<IBuildContext, ActionResult> buildAction)
 	{
 		this._task.makeBuildNode(key, name, dependencies, buildAction);
 		return this;
@@ -50,10 +60,21 @@ internal class TaskBuilder : ITaskBuilder
 
 	public ITaskBuilder copy(File inputFile, File outputFile)
 	{
-		var key = $"copy:{inputFile.Path}:{outputFile.Path}";
-		this.buildAction(key, $"Copy {inputFile.Path} to {outputFile.Path}", inputFile.Dependencies,
-			ctx => System.IO.File.Copy(inputFile.Path, outputFile.Path, true));
-		outputFile.addDependencies(key);
+		var key = $"copy:{outputFile.Path}";
+		this.buildAction(key, $"Copy {inputFile.Path} to {outputFile.Path}", () => [],
+			ctx =>
+			{
+				try
+				{
+					System.IO.File.Copy(inputFile.Path, outputFile.Path, true);
+					return ActionResult.SUCCESS;
+				}
+				catch (Exception ex)
+				{
+					ctx.log(LogLevel.FATAL, "COPY", ex);
+					return ActionResult.FAILURE;
+				}
+			});
 		return this;
 	}
 
@@ -71,8 +92,9 @@ internal class TaskBuilder : ITaskBuilder
 	{
 		this._parameters.Add(context =>
 		{
-			var value = context.Args.FirstOrDefault(arg => arg.StartsWith($"--{name}="));
-			builder(context, this, value != null ? converter(value.Remove(0, $"--{name}".Length)) : defaultValue);
+			var value = context.Args.FirstOrDefault(arg => arg.StartsWith($"--{name}="))?.Remove(0, $"--{name}=".Length);
+			builder(context, this, value != null ? converter(value) : defaultValue);
+			context.log(LogLevel.DEBUG, "PARAMS", $"--{name}={(value ?? defaultValue?.ToString())}");
 		});
 		this._task._paramHelps[name] = description + $" (default: {defaultValue})";
 		return this;
@@ -81,7 +103,15 @@ internal class TaskBuilder : ITaskBuilder
 	public ITaskBuilder makeParam(string name, bool defaultValue, Action<IBuildContext, ITaskBuilder, bool> builder,
 		string description)
 	{
-		this._parameters.Add(context => builder(context, this, context.Args.Contains($"--{name}")));
+		this._parameters.Add(context =>
+		{
+			var value = context.Args.Contains($"--{name}");
+			builder(context, this, value);
+			if (value)
+			{
+				context.log(LogLevel.DEBUG, "PARAMS", $"--{name}");
+			}
+		});
 		this._task._paramHelps[name] = description + $" (default: {defaultValue})";
 		return this;
 	}

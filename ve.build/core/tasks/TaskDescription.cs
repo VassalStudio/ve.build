@@ -17,7 +17,8 @@ internal class TaskDescription
 
 	public Task buildTask(TaskDescription[] tasks, IBuildContext ctx)
 	{
-		var taskBuilder = new TaskBuilder(this.Name, this.Description);
+		var taskBuilder = new TaskBuilder(this.Name, this.Description, ctx);
+		ctx.log(LogLevel.DEBUG, "CORE", $"Building task: {this.Name}");
 		foreach (var builder in this.Builder)
 		{
 			builder(taskBuilder);

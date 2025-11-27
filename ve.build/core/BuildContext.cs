@@ -37,20 +37,25 @@ public interface IBuildContext
 	string[] Args { get; }
 	LogLevel LogLevel { get; }
 	Configuration Configuration { get; }
+	Configuration[] Configurations => [Configuration.DEBUG, Configuration.RELEASE];
+	PlatformDesc[] Platforms { get; }
+	PlatformDesc Platform { get; }
 	void log(LogLevel level, string category, string message);
 	void log(LogLevel level, string category, Exception ex);
-	System.Threading.Tasks.Task run(string[] args);
+	Task<int> run(string[] args);
 	T getTool<T>() where T : ITool;
 }
 internal class BuildContext : IBuildContext
 {
-	public string[] Args { get; private set; }
+	public string[] Args { get; private set; } = Array.Empty<string>();
 	public LogLevel LogLevel { get; set; } = LogLevel.DEFAULT;
 	public Configuration Configuration { get; set; } = Configuration.DEFAULT;
 	public PlatformDesc Platform { get; set; }
 	private readonly Action<IBuildContext>[] Parameters;
 	private readonly KeyValuePair<string, string>[] ParamHelps;
 	private readonly Dictionary<Type, ITool> _tools = new();
+	private readonly IEnumerable<PlatformDesc> _platforms;
+
 	internal BuildContext(KeyValuePair<string, TaskDescription>[] tasks,
 		KeyValuePair<string, ProjectDescription>[] projects,
 		Action<IBuildContext>[] parameters, KeyValuePair<string, string>[] paramHelps,
@@ -60,14 +65,16 @@ internal class BuildContext : IBuildContext
 		this.Projects = projects;
 		this.Parameters = parameters;
 		this.ParamHelps = paramHelps;
+		this._platforms = platforms.Select(p => p.Value);
 		this.Platform = platforms.FirstOrDefault(p => p.Value.Platform.Platform.IsCurrent).Value;
 	}
 
 	internal KeyValuePair<string, TaskDescription>[] Tasks { get; }
 	internal KeyValuePair<string, ProjectDescription>[] Projects { get; }
+	public ProjectDescription? SelectedProject { get; set; } = null;
 	public bool ShouldPrintHelp { get; set; }
 
-	public async System.Threading.Tasks.Task run(string[] args)
+	public async Task<int> run(string[] args)
 	{
 		this.Args = args;
 		foreach (var param in this.Parameters)
@@ -94,22 +101,31 @@ internal class BuildContext : IBuildContext
 		{
 			try
 			{
-				var platform = this.Platform.buildPlatform();
+				foreach (var buildingPlatform in this.Platforms)
+				{
+					this.log(LogLevel.DEBUG, "CORE", $"Building platform: {buildingPlatform.Platform.Platform.Name}");
+					buildingPlatform.buildPlatform();
+				}
+				var platform = this.Platform.Platform.Platform;
 				foreach (var tool in platform.DefaultTools)
 				{
 					this._tools[tool.Key] = tool.Value;
+					this.log(LogLevel.DEBUG, "TOOLS", $"Found toolchain: {tool.Key} = {tool.Value.Name}");
 				}
 				var task = platform.buildTask(taskDesc!, this.Tasks.Select(t => t.Value).ToArray(), this);
 				var projectsDescs = this.Projects.Select(p => p.Value).ToArray();
-				var graph = task.buildGraph(projectsDescs.ToList(), platform.getExt);
+				var graph = task.buildGraph(projectsDescs.ToList(), platform.getExt, this.SelectedProject);
 				await graph.build(this);
+				this.log(LogLevel.INFO, "CORE", "Build finished");
 			}
 			catch(Exception ex)
 			{
 				this.log(LogLevel.FATAL, "BUILD", $"Task '{taskName}' failed:");
 				this.log(LogLevel.FATAL, "BUILD", ex);
+				return -1;
 			}
 		}
+		return 0;
 	}
 
 	public T getTool<T>() where T : ITool
@@ -128,6 +144,8 @@ internal class BuildContext : IBuildContext
 		this.log(LogLevel.INFO, "BUILD", "Use `ve.build <task-name> --help` to see task-specific help.");
 		this.log(LogLevel.INFO, "BUILD", "Use `ve.build --help` to see this help message.");
 	}
+
+	public PlatformDesc[] Platforms => this._platforms.ToArray();
 
 	public void log(LogLevel level, string category, string message)
 	{

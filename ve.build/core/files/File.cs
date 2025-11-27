@@ -4,27 +4,32 @@ namespace ve.build.core.files;
 
 public class File
 {
-	private readonly string _path;
-	private string[] _dependencies;
 	private readonly Func<FileType, string> _extensionGetter;
 
-	public File(string path, Func<FileType, string> extentionGetter)
+	public File(string path, Func<FileType, string> extentionGetter, File? sourceFile)
 	{
-		this._path = path;
-		this._dependencies = [];
+		this.Path = path;
 		this._extensionGetter = extentionGetter;
+		this.SourceFile = sourceFile;
 	}
 
-	public string Path => this._path;
-	public string[] Dependencies => this._dependencies;
-
-	public void addDependencies(params string[] deps)
+	public File(string path, Func<FileType, string> extentionGetter)
+		: this(path, extentionGetter, null)
 	{
-		this._dependencies = this._dependencies.Concat(deps).ToArray();
 	}
+
+	public string Path { get; }
+	public File? SourceFile { get; }
+	public DateTime TimeStamp => System.IO.File.Exists(this.Path) ? System.IO.File.GetLastWriteTimeUtc(this.Path) : DateTime.UtcNow;
+	public bool Exists => System.IO.File.Exists(this.Path);
 
 	public File changeExtension(FileType type)
 	{
-		return new File(System.IO.Path.ChangeExtension(this.Path, this._extensionGetter(type)), this._extensionGetter);
+		return new File(System.IO.Path.ChangeExtension(this.Path, this._extensionGetter(type)), this._extensionGetter, this.SourceFile ?? this);
+	}
+
+	public File changeExtension(FileType type, bool resetSource)
+	{
+		return resetSource ? new File(System.IO.Path.ChangeExtension(this.Path, this._extensionGetter(type)), this._extensionGetter, this) : this.changeExtension(type);
 	}
 }

@@ -29,7 +29,7 @@ internal class Task
 		{
 			foreach (var task in tasks)
 			{
-				node.Dependencies.AddRange(task.BuildNodes.Select(n => n.Key));
+				node.makeDependencies(() => task.BuildNodes.Select(n => n.Key).ToArray());
 			}
 		}
 		return this;
@@ -39,22 +39,37 @@ internal class Task
 	public string Description { get; }
 	public bool ShouldPrintHelp { get; set; }
 
-	public Dag buildGraph(List<ProjectDescription> projectsDescs, Func<FileType, string> getExtFunc)
+	public Dag buildGraph(List<ProjectDescription> projectsDescs, Func<FileType, string> getExtFunc, ProjectDescription? selectedProject)
 	{
 		Dictionary<Project, Dictionary<string, bool>> projects = new();
-		while (projectsDescs.Count > 0)
+		ProjectDescription[] projectsArray = selectedProject != null ? [selectedProject] : projectsDescs.ToArray();
+		do
 		{
-			var built = projectsDescs[0].buildProject(this.ProjectActions
-				.Concat(this._dependencies.SelectMany(d => d.ProjectActions)).ToArray(), this._builder, getExtFunc);
-			projects.Add(built.Key, built.Value);
-			projectsDescs.RemoveAt(0);
-		}
+			var built = this.buildProject(projectsArray, getExtFunc);
+			projects = projects.Concat(built).ToDictionary();
+			projectsArray = projectsDescs.Where(p => built.Values.SelectMany(v => v.Keys).Contains(p.Name)
+			                                         && projects.Select(p => p.Key.Name).Contains(p.Name) == false).ToArray();
+		} while (projectsArray.Length > 0);
 
-		foreach (var project in projects)
+		List<Project> resolved = new();
+		while (resolved.Count < projects.Count)
 		{
-			project.Key.resolveDependencies(projects.Keys.ToArray(), project.Value);
+			var pair = projects.First(p => p.Value.All(d => resolved.Select(r => r.Name).Contains(d.Key)) && resolved.Contains(p.Key) == false);
+			var project = pair.Key;
+			project.resolveDependencies(projects.Keys.ToArray(), pair.Value);
+			resolved.Add(project);
 		}
-		return new Dag(this.BuildNodes.ToArray());
+		var dag = new Dag(this.BuildNodes.ToArray());
+		foreach (var dependency in this._dependencies)
+		{
+			dag.dependOf(dependency.buildGraph(projectsDescs, getExtFunc, selectedProject));
+		}
+		return dag;
+	}
+
+	private Dictionary<Project, Dictionary<string, bool>> buildProject(ProjectDescription[] projects, Func<FileType, string> getExtFunc)
+	{
+		return projects.Select(p => p.buildProject(this.ProjectActions, this._builder, getExtFunc)).ToDictionary();
 	}
 
 	public void printHelp()
@@ -79,16 +94,15 @@ internal class Task
 		}
 	}
 
-	public void makeBuildNode(string key, string name, string[] dependencies, Func<IBuildContext, System.Threading.Tasks.Task> buildAction)
+	public void makeBuildNode(string key, string name, Func<IEnumerable<string>> dependencies, Func<IBuildContext, Task<ActionResult>> buildAction)
 	{
 		this.BuildNodes.Add(new DagNode(key, name, dependencies, buildAction));
 	}
-	public void makeBuildNode(string key, string name, string[] dependencies, Action<IBuildContext> buildAction)
+	public void makeBuildNode(string key, string name, Func<IEnumerable<string>> dependencies, Func<IBuildContext, ActionResult> buildAction)
 	{
 		this.makeBuildNode(key, name, dependencies, ctx =>
 		{
-			buildAction(ctx);
-			return System.Threading.Tasks.Task.CompletedTask;
+			return System.Threading.Tasks.Task.FromResult(buildAction(ctx));
 		});
 	}
 }
