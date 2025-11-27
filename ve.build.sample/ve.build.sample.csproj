@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ve.build.msvc\ve.build.msvc.csproj" />
+    <ProjectReference Include="..\ve.build.vcxprojgenerator\ve.build.vcxprojgenerator.csproj" />
   </ItemGroup>
 
 </Project>
