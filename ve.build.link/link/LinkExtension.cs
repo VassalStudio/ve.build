@@ -169,6 +169,13 @@ public static class LinkExtension
 	{
 		_projectTypes[builder] = type;
 		var outputFile = getOutFile(builder);
+		var copyToOutput = (ITaskBuilder tb) => tb.eachProject(p => p.dependencies(d =>
+		{
+			if (d.Select(d => d.Key.Name).Contains(builder.Name))
+			{
+				tb.copy(outputFile, getOutFile(p), () => [$"link:{outputFile.Path}"]);
+			}
+		}));
 		return builder.sources(files => builder.dependencies(deps => builder.task("build",
 			tbuilder =>
 			{
