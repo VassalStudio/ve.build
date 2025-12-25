@@ -18,7 +18,7 @@ This repo contains the core abstractions and a sandbox used to validate the arch
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="VEBuild.Core" Version="1.0.0-rc" />
+    <PackageReference Include="VEBuild.Core" Version="1.0.0.1-rc" />
   </ItemGroup>
 
   <ItemGroup>
