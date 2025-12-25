@@ -54,10 +54,10 @@ internal class Dag
 		else
 		{
 			var completed = 0;
-			Dictionary<Task<ActionResult>, DagNode> runningTasks = new();
+			List<KeyValuePair<Task<ActionResult>, DagNode>> runningTasks = new();
 			var whenAny = async () =>
 			{
-				var finished = await Task.WhenAny(runningTasks.Keys);
+				var finished = await Task.WhenAny(runningTasks.Select(t => t.Key));
 				completed++;
 				ctx.log((await finished) switch
 					{
@@ -65,9 +65,9 @@ internal class Dag
 						ActionResult.SKIP => LogLevel.VERBOSE,
 						ActionResult.FAILURE => LogLevel.ERROR,
 						_ => throw new NotImplementedException(),
-					}, "BUILD", $"[{completed}/{count}] {runningTasks[finished].Name}");
-				finishedNodes.Add(runningTasks[finished].Key);
-				runningTasks.Remove(finished);
+					}, "BUILD", $"[{completed}/{count}] {runningTasks.First(t => t.Key == finished).Value.Name}");
+				finishedNodes.Add(runningTasks.First(t => t.Key == finished).Value.Key);
+				runningTasks.RemoveAll(t => t.Key == finished);
 			};
 			while (this.Nodes.Length > 0 || runningTasks.Count > 0)
 			{
@@ -87,7 +87,7 @@ internal class Dag
 					{
 						await whenAny();
 					}
-					runningTasks.Add(this._makeTask(ctx, node), node);
+					runningTasks.Add(new KeyValuePair<Task<ActionResult>, DagNode>(this._makeTask(ctx, node), node));
 				}
 				this.Nodes = this.Nodes.Where(n => readyToBuild.Contains(n) == false).ToArray();
 			}

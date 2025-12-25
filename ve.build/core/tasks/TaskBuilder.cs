@@ -16,6 +16,7 @@ public interface ITaskBuilder
 	ITaskBuilder eachProject(Action<IProjectBuilder> builderAction);
 	ITaskBuilder buildAction(string key, string name, Func<IEnumerable<string>> dependencies, Func<IBuildContext, ActionResult> buildAction);
 	ITaskBuilder buildAction(string key, string name, Func<IEnumerable<string>> dependencies, Func<IBuildContext, Task<ActionResult>> buildAction);
+	ITaskBuilder copy(File inputFile, File outputFile, Func<string[]> deps);
 	string Name { get; }
 	IBuildContext BuildContext { get; }
 }
@@ -58,10 +59,10 @@ internal class TaskBuilder : ITaskBuilder
 		return this;
 	}
 
-	public ITaskBuilder copy(File inputFile, File outputFile)
+	public ITaskBuilder copy(File inputFile, File outputFile, Func<string[]> deps)
 	{
 		var key = $"copy:{outputFile.Path}";
-		this.buildAction(key, $"Copy {inputFile.Path} to {outputFile.Path}", () => [],
+		this.buildAction(key, $"Copy {inputFile.Path} to {outputFile.Path}", deps,
 			ctx =>
 			{
 				try
