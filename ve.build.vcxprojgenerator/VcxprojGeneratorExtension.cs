@@ -20,6 +20,8 @@ internal class VcxprojGenerator(string file) : IProjectGenerator
 	private readonly List<string> _projectFiles = new();
 	public async Task<ActionResult> generateProjectFiles(IBuildContext ctx, IProjectBuilder projectBuilder, File[] files, IEnumerable<IProjectBuilder> dependencies)
 	{
+		var primaryCsproj = this._foundCsproj(this.file);
+		var dotnetCommand = $"dotnet run -c Release --project \"${primaryCsproj}\" -- ";
 		var path = this.projectFile(projectBuilder);
 		var filter = path + ".filters";
 		var dirs = files.Concat(dependencies.SelectMany(d => d.SourceFiles))
@@ -54,9 +56,9 @@ internal class VcxprojGenerator(string file) : IProjectGenerator
 			new XElement(ns + "Import", new XAttribute("Project", @"$(VCTargetsPath)\Microsoft.Cpp.props")),
 			await Task.WhenAll(configurations.Select(async c => new XElement(ns + "PropertyGroup",
 					new XAttribute("Condition", $"'$(Configuration)|$(Platform)'=='{c.Key}|{c.Value}'"),
-					new XElement(ns + "NMakeBuildCommandLine", $"\"{Environment.ProcessPath}\" build --config={c.Key} --platform={c.Value} --project={projectBuilder.Name}"),
-					new XElement(ns + "NMakeReBuildCommandLine", $"\"{Environment.ProcessPath}\" rebuild --config={c.Key} --platform={c.Value} --project={projectBuilder.Name}"),
-					new XElement(ns + "NMakeCleanCommandLine", $"\"{Environment.ProcessPath}\" clean --config={c.Key} --platform={c.Value} --project={projectBuilder.Name}"),
+					new XElement(ns + "NMakeBuildCommandLine", $"{dotnetCommand} build --config={c.Key} --platform={c.Value} --project={projectBuilder.Name}"),
+					new XElement(ns + "NMakeReBuildCommandLine", $"{dotnetCommand} rebuild --config={c.Key} --platform={c.Value} --project={projectBuilder.Name}"),
+					new XElement(ns + "NMakeCleanCommandLine", $"{dotnetCommand} clean --config={c.Key} --platform={c.Value} --project={projectBuilder.Name}"),
 					new XElement(ns + "NMakeIncludeSearchPath", string.Join(';', dirs)),
 					new XElement(ns + "NMakePreprocessorDefinitions", "$(NMakePreprocessorDefinitions);" + string.Join(';', defines)),
 					new XElement(ns + "NMakeForcedIncludes", await this.generateForceInclude(projectBuilder, dependencies, c)),
@@ -155,8 +157,8 @@ internal class VcxprojGenerator(string file) : IProjectGenerator
 
 	public void finalStep(ITaskBuilder taskBuilder)
 	{
-		var sln = this._foundSln(this.file);
 		var primaryCsproj = this._foundCsproj(this.file);
+		var sln = this._foundSln(this.file) ?? Path.ChangeExtension(primaryCsproj, ".sln");
 		var csprojects = this.csProjects(sln);
 		taskBuilder.buildAction($"gsf:{sln}", $"Generate {sln}", () => this._projectFiles.Select(p => $"gpf:{Path.GetFileNameWithoutExtension(p)}"),
 			async ctx =>
@@ -223,7 +225,7 @@ internal class VcxprojGenerator(string file) : IProjectGenerator
 		}
 	}
 
-	private string _foundSln(string path)
+	private string? _foundSln(string path)
 	{
 		var csproj = this._foundCsproj(path);
 		path = csproj;
@@ -236,7 +238,8 @@ internal class VcxprojGenerator(string file) : IProjectGenerator
 				return sln;
 			}
 		}
-		throw new Exception("");
+
+		return null;
 	}
 
 	private bool _hasCsproj(string sln, string csproj)
