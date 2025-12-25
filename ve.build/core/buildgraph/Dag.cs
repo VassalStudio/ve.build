@@ -59,15 +59,16 @@ internal class Dag
 			{
 				var finished = await Task.WhenAny(runningTasks.Select(t => t.Key));
 				completed++;
+				var index = runningTasks.FindIndex(t => t.Key == finished);
 				ctx.log((await finished) switch
 					{
 						ActionResult.SUCCESS => LogLevel.INFO,
 						ActionResult.SKIP => LogLevel.VERBOSE,
 						ActionResult.FAILURE => LogLevel.ERROR,
 						_ => throw new NotImplementedException(),
-					}, "BUILD", $"[{completed}/{count}] {runningTasks.First(t => t.Key == finished).Value.Name}");
-				finishedNodes.Add(runningTasks.First(t => t.Key == finished).Value.Key);
-				runningTasks.RemoveAt(runningTasks.FindIndex(t => t.Key == finished));
+					}, "BUILD", $"[{completed}/{count}] {runningTasks[index].Value.Name}");
+				finishedNodes.Add(runningTasks[index].Value.Key);
+				runningTasks.RemoveAt(index);
 			};
 			while (this.Nodes.Length > 0 || runningTasks.Count > 0)
 			{
