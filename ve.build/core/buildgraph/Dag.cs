@@ -54,21 +54,21 @@ internal class Dag
 		else
 		{
 			var completed = 0;
-			List<KeyValuePair<Task<ActionResult>, DagNode>> runningTasks = new();
+			Dictionary<DagNode, Task<ActionResult>> runningTasks = new();
 			var whenAny = async () =>
 			{
-				var finished = await Task.WhenAny(runningTasks.Select(t => t.Key));
+				var finished = await Task.WhenAny(runningTasks.Select(async t => new KeyValuePair<DagNode, ActionResult>(t.Key, await t.Value)));
 				completed++;
-				var index = runningTasks.FindIndex(t => t.Key == finished);
-				ctx.log((await finished) switch
+				var result = await finished;
+				ctx.log(result.Value switch
 					{
 						ActionResult.SUCCESS => LogLevel.INFO,
 						ActionResult.SKIP => LogLevel.VERBOSE,
 						ActionResult.FAILURE => LogLevel.ERROR,
 						_ => throw new NotImplementedException(),
-					}, "BUILD", $"[{completed}/{count}] {runningTasks[index].Value.Name}");
-				finishedNodes.Add(runningTasks[index].Value.Key);
-				runningTasks.RemoveAt(index);
+					}, "BUILD", $"[{completed}/{count}] {result.Key.Name}");
+				finishedNodes.Add(result.Key.Key);
+				runningTasks.Remove(result.Key);
 			};
 			while (this.Nodes.Length > 0 || runningTasks.Count > 0)
 			{
@@ -78,10 +78,11 @@ internal class Dag
 					if (runningTasks.Count > 0)
 					{
 						await whenAny();
+						continue;
 					}
 					else
 					{
-						throw new Exception("Cyclic dependency detected in build graph");
+						throw new Exception("Cyclic dependency detected in build graph" + string.Join(',', this.Nodes.SelectMany(n => n.Dependencies.Where(d => finishedNodes.Contains(d) == false))));
 					}
 				}
 				foreach (var node in readyToBuild)
@@ -89,8 +90,9 @@ internal class Dag
 					if (runningTasks.Count >= threads)
 					{
 						await whenAny();
+						continue;
 					}
-					runningTasks.Add(new KeyValuePair<Task<ActionResult>, DagNode>(this._makeTask(ctx, node), node));
+					runningTasks.Add(node, this._makeTask(ctx, node));
 				}
 				this.Nodes = this.Nodes.Where(n => readyToBuild.Contains(n) == false).ToArray();
 			}
