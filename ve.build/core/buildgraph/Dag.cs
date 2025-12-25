@@ -67,7 +67,7 @@ internal class Dag
 						_ => throw new NotImplementedException(),
 					}, "BUILD", $"[{completed}/{count}] {runningTasks.First(t => t.Key == finished).Value.Name}");
 				finishedNodes.Add(runningTasks.First(t => t.Key == finished).Value.Key);
-				runningTasks.RemoveAll(t => t.Key == finished);
+				runningTasks.RemoveAt(runningTasks.FindIndex(t => t.Key == finished));
 			};
 			while (this.Nodes.Length > 0 || runningTasks.Count > 0)
 			{
@@ -77,9 +77,11 @@ internal class Dag
 					if (runningTasks.Count > 0)
 					{
 						await whenAny();
-						continue;
 					}
-					throw new Exception("Cyclic dependency detected in build graph");
+					else
+					{
+						throw new Exception("Cyclic dependency detected in build graph");
+					}
 				}
 				foreach (var node in readyToBuild)
 				{

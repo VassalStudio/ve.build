@@ -9,8 +9,8 @@
     <DebugSymbols>true</DebugSymbols>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <Title>ve.build</Title>
-    <AssemblyVersion>1.0.0.1</AssemblyVersion>
-    <FileVersion>1.0.0.1</FileVersion>
+    <AssemblyVersion></AssemblyVersion>
+    <FileVersion></FileVersion>
     <SignAssembly>False</SignAssembly>
     <Authors>VassalStudio</Authors>
     <Version>1.0.0.1-rc</Version>
