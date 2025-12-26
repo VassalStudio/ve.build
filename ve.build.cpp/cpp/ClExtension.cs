@@ -101,15 +101,35 @@ public static class ClExtension
 			var deps = cpp.scanDependencies(inFile, objFile);
 			configurator(deps);
 			var result = await deps.run(ctx);
-			foreach (var d in deps.ProvidedDeps)
+			lock (depenencies)
 			{
-				depenencies[d.Key] = d.Value;
+				foreach (var d in deps.ProvidedDeps)
+				{
+					depenencies[d.Key] = d.Value;
+				}
 			}
-			includes[inFile].AddRange(deps.Includes);
-			requires[inFile].AddRange(deps.Dependencies);
+			lock (includes)
+			{
+				includes[inFile].AddRange(deps.Includes);
+			}
+			lock (requires)
+			{
+				requires[inFile].AddRange(deps.Dependencies);
+			}
 			return result;
 		}).buildAction(key, inFile.Path, () =>
-			requires[inFile].Select(r => depenencies.TryGetValue(r, out var val) ? val : Guid.NewGuid().ToString()).Select(r => $"cl:{r}").Prepend(depsKey), async ctx =>
+		{
+			lock (requires)
+			{
+				return requires[inFile].Select(r =>
+				{
+					lock (depenencies)
+					{
+						return depenencies.TryGetValue(r, out var val) ? val : Guid.NewGuid().ToString();
+					}
+				}).Select(r => $"cl:{r}").Prepend(depsKey);
+			}
+		}, async ctx =>
 		{
 			var cpp = ctx.getTool<ICppTool>();
 			var config = cpp.compile(inFile, objFile);
