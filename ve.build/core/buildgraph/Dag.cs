@@ -36,14 +36,14 @@ internal class Dag
 					throw new Exception("Cyclic dependency detected in build graph");
 				}
 				var result = await this._makeTask(ctx, readyToBuild);
-				ctx.log(result switch
+				ctx.log(result.Value switch
 					{
 						ActionResult.SUCCESS => LogLevel.INFO,
 						ActionResult.SKIP => LogLevel.VERBOSE,
 						ActionResult.FAILURE => LogLevel.ERROR,
 						_ => throw new NotImplementedException(),
 					}, "BUILD", $"[{count - this.Nodes.Length + 1}/{count}] {readyToBuild.Name}");
-				if (result == ActionResult.FAILURE)
+				if (result.Value == ActionResult.FAILURE)
 				{
 					throw new Exception("Build failed");
 				}
@@ -54,54 +54,62 @@ internal class Dag
 		else
 		{
 			var completed = 0;
-			Dictionary<DagNode, Task<ActionResult>> runningTasks = new();
+			var activeWrappers = new List<Task<KeyValuePair<DagNode, ActionResult>>>();
 			var whenAny = async () =>
 			{
-				var finished = await Task.WhenAny(runningTasks.Select(async t => new KeyValuePair<DagNode, ActionResult>(t.Key, await t.Value)));
+				var finishedTask = await Task.WhenAny(activeWrappers);
+				activeWrappers.Remove(finishedTask);
 				completed++;
-				var result = await finished;
-				ctx.log(result.Value switch
-					{
-						ActionResult.SUCCESS => LogLevel.INFO,
-						ActionResult.SKIP => LogLevel.VERBOSE,
-						ActionResult.FAILURE => LogLevel.ERROR,
-						_ => throw new NotImplementedException(),
-					}, "BUILD", $"[{completed}/{count}] {result.Key.Name}");
-				finishedNodes.Add(result.Key.Key);
-				runningTasks.Remove(result.Key);
+				try
+				{
+					var (node, result) = await finishedTask;
+					ctx.log(result switch
+						{
+							ActionResult.SUCCESS => LogLevel.INFO,
+							ActionResult.SKIP => LogLevel.VERBOSE,
+							ActionResult.FAILURE => LogLevel.ERROR,
+							_ => throw new NotImplementedException(),
+						}, "BUILD", $"[{completed}/{count}] {node.Name}");
+					finishedNodes.Add(node.Key);
+				}
+				catch (Exception ex)
+				{
+					ctx.log(LogLevel.ERROR, "BUILD", $"Task failed: {ex.Message}");
+					throw;
+				}
 			};
-			while (this.Nodes.Length > 0 || runningTasks.Count > 0)
+			while (this.Nodes.Length > 0 || activeWrappers.Count > 0)
 			{
-				var readyToBuild = this.Nodes.Where(n => n.Dependencies.All(d => finishedNodes.Contains(d))).ToArray();
+				var readyToBuild = this.Nodes
+					.Where(n => n.Dependencies.All(d => finishedNodes.Contains(d)))
+					.ToArray();
 				if (readyToBuild.Length == 0)
 				{
-					if (runningTasks.Count > 0)
+					if (activeWrappers.Count > 0)
 					{
 						await whenAny();
-						continue;
 					}
 					else
 					{
-						throw new Exception("Cyclic dependency detected in build graph" + string.Join(',', this.Nodes.SelectMany(n => n.Dependencies.Where(d => finishedNodes.Contains(d) == false))));
+						throw new Exception("Cyclic dependency detected or logic error");
 					}
 				}
 				foreach (var node in readyToBuild)
 				{
-					if (runningTasks.Count >= threads)
+					if (activeWrappers.Count >= threads)
 					{
 						await whenAny();
-						continue;
 					}
-					runningTasks.Add(node, this._makeTask(ctx, node));
+					activeWrappers.Add(this._makeTask(ctx, node));
 				}
-				this.Nodes = this.Nodes.Where(n => readyToBuild.Contains(n) == false).ToArray();
+				this.Nodes = this.Nodes.Where(n => !readyToBuild.Contains(n)).ToArray();
 			}
 		}
 	}
 
-	private Task<ActionResult> _makeTask(IBuildContext ctx, DagNode node)
+	private async Task<KeyValuePair<DagNode, ActionResult>> _makeTask(IBuildContext ctx, DagNode node)
 	{
-		return node.BuildAction(ctx);
+		return new KeyValuePair<DagNode, ActionResult>(node, await node.BuildAction(ctx));
 	}
 
 	public void dependOf(Dag buildGraph)
