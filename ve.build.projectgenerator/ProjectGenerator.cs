@@ -8,6 +8,7 @@ namespace ve.build.projectgenerator;
 public interface IProjectGenerator
 {
 	string Name { get; }
+	bool IsNative { get; }
 	Task<ActionResult> generateProjectFiles(IBuildContext ctx, IProjectBuilder projectBuilder, File[] files, IEnumerable<IProjectBuilder> dependencies);
 	string projectFile(IProjectBuilder projectBuilder);
 	void finalStep(ITaskBuilder taskBuilder);

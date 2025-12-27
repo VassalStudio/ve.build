@@ -13,7 +13,7 @@ public static class ProjectGeneratorExtension
 		if (_generators.Length == 0)
 		{
 			builder.makeParam<IProjectGenerator?>("generator", null,
-				(_, generator) => _selectedGenerator = generator ?? _generators.Last(), s => _generators.First(g => g.Name == s),
+				(_, generator) => _selectedGenerator = generator ?? _generators.Last(g => g.IsNative), s => _generators.First(g => g.Name == s),
 				"Specifies which project generator to use.").task("generateProjectFiles", "Generates project files for the selected generator.", taskBuilder => 
 					generator.finalStep(taskBuilder.eachProject(projectBuilder => projectBuilder.sources(files => projectBuilder.dependencies(deps =>
 						projectBuilder.task("generateProjectFiles", taskBuilder =>
