@@ -1,0 +1,45 @@
+<Solution>
+  <Configurations>
+    <BuildType Name="DEBUG" />
+    <BuildType Name="RELEASE" />
+    <Platform Name="efi-arm64" />
+    <Platform Name="efi-x64" />
+    <Platform Name="efi-x86" />
+    <Platform Name="windows-arm64" />
+    <Platform Name="windows-x64" />
+    <Platform Name="windows-x86" />
+  </Configurations>
+  <Project Path="D:/Projects/ve.build/ve.build.cpp.msvc/ve.build.cpp.msvc.csproj">
+    <BuildType Project="Release" />
+  </Project>
+  <Project Path="D:/Projects/ve.build/ve.build.cpp/ve.build.cpp.csproj">
+    <BuildType Project="Release" />
+  </Project>
+  <Project Path="D:/Projects/ve.build/ve.build.link.msvc/ve.build.link.msvc.csproj">
+    <BuildType Project="Release" />
+  </Project>
+  <Project Path="D:/Projects/ve.build/ve.build.link/ve.build.link.csproj">
+    <BuildType Project="Release" />
+  </Project>
+  <Project Path="D:/Projects/ve.build/ve.build.msvc/ve.build.msvc.csproj">
+    <BuildType Project="Release" />
+  </Project>
+  <Project Path="D:/Projects/ve.build/ve.build.projectgenerator/ve.build.projectgenerator.csproj">
+    <BuildType Project="Release" />
+  </Project>
+  <Project Path="D:/Projects/ve.build/ve.build.sample/obj/sample.lib.vcxproj" Id="9c8a2a65-dbcf-990d-798d-f26916c762f1">
+    <BuildDependency Project="D:/Projects/ve.build/ve.build.sample/ve.build.sample.csproj" />
+  </Project>
+  <Project Path="D:/Projects/ve.build/ve.build.sample/obj/sample.vcxproj" Id="e3836ef0-fe84-919a-5163-6d1fb28adb7f">
+    <BuildDependency Project="D:/Projects/ve.build/ve.build.sample/ve.build.sample.csproj" />
+  </Project>
+  <Project Path="D:/Projects/ve.build/ve.build.sample/ve.build.sample.csproj">
+    <BuildType Project="Release" />
+  </Project>
+  <Project Path="D:/Projects/ve.build/ve.build.vcxprojgenerator/ve.build.vcxprojgenerator.csproj">
+    <BuildType Project="Release" />
+  </Project>
+  <Project Path="D:/Projects/ve.build/ve.build/ve.build.csproj">
+    <BuildType Project="Release" />
+  </Project>
+</Solution>

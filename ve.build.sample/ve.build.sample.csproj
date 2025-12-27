@@ -8,8 +8,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\ve.build.cpp.msvc\ve.build.cpp.msvc.csproj" />
+    <ProjectReference Include="..\ve.build.cpp\ve.build.cpp.csproj" />
+    <ProjectReference Include="..\ve.build.link.msvc\ve.build.link.msvc.csproj" />
+    <ProjectReference Include="..\ve.build.link\ve.build.link.csproj" />
     <ProjectReference Include="..\ve.build.msvc\ve.build.msvc.csproj" />
+    <ProjectReference Include="..\ve.build.projectgenerator\ve.build.projectgenerator.csproj" />
     <ProjectReference Include="..\ve.build.vcxprojgenerator\ve.build.vcxprojgenerator.csproj" />
+    <ProjectReference Include="..\ve.build\ve.build.csproj" />
   </ItemGroup>
 
 </Project>

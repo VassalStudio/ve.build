@@ -2,7 +2,7 @@
   "profiles": {
     "ve.build.sample": {
       "commandName": "Project",
-      "commandLineArgs": " build --config=DEBUG --platform=windows-x64 --project=sample"
+      "commandLineArgs": " generateProjectFiles"
     }
   }
 }
