@@ -240,7 +240,7 @@ internal class Vcxproj2022(string file) : VcxprojGenerator("vs2022", "17.0", "v1
 {
 	private string? _foundSln(string path)
 	{
-		var csproj = this._foundCsproj(path) ?? Environment.ProcessPath;
+		var csproj = this._foundCsproj(path) ?? Environment.ProcessPath!;
 		path = csproj;
 		while (string.IsNullOrWhiteSpace(path) == false)
 		{
@@ -329,7 +329,7 @@ internal class Vcxproj2022(string file) : VcxprojGenerator("vs2022", "17.0", "v1
 			});
 	}
 
-	protected override IEnumerable<string> csProjects(string sln, string? primaryProject)
+	protected override IEnumerable<string> csProjects(string? sln, string? primaryProject)
 	{
 		if (System.IO.File.Exists(sln) == false) return primaryProject != null ? [primaryProject] : [];
 		var dir = Path.GetDirectoryName(sln)!;
@@ -343,7 +343,7 @@ internal class Vcxproj2026(string file) : VcxprojGenerator("vs2026", "18.0", "v1
 {
 	private string? _foundSln(string path)
 	{
-		var csproj = this._foundCsproj(path) ?? Environment.ProcessPath;
+		var csproj = this._foundCsproj(path) ?? Environment.ProcessPath!;
 		path = csproj;
 		while (string.IsNullOrWhiteSpace(path) == false)
 		{
