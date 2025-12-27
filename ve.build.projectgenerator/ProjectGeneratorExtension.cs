@@ -14,12 +14,12 @@ public static class ProjectGeneratorExtension
 		{
 			builder.makeParam<IProjectGenerator?>("generator", null,
 				(_, generator) => _selectedGenerator = generator ?? _generators.Last(g => g.IsNative), s => _generators.First(g => g.Name == s),
-				"Specifies which project generator to use.").task("generateProjectFiles", "Generates project files for the selected generator.", taskBuilder => 
-					generator.finalStep(taskBuilder.eachProject(projectBuilder => projectBuilder.sources(files => projectBuilder.dependencies(deps =>
+				"Specifies which project generator to use.").task("generateProjectFiles", "Generates project files for the selected generator.", taskBuilder =>
+				_selectedGenerator!.finalStep(taskBuilder.eachProject(projectBuilder => projectBuilder.sources(files => projectBuilder.dependencies(deps =>
 						projectBuilder.task("generateProjectFiles", taskBuilder =>
 						{
 							var file = _selectedGenerator!.projectFile(projectBuilder);
-							generator.setupProject(file);
+							_selectedGenerator.setupProject(file);
 							taskBuilder.buildAction($"gpf:{projectBuilder.Name}",
 								$"Generates {file}",
 								() => projectBuilder.Dependencies.Select(d => $"gpf:{d}"),
