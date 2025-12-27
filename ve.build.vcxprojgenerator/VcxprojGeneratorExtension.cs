@@ -1,6 +1,7 @@
-﻿using System.Linq;
+﻿using Microsoft.Win32;
+using System.Diagnostics;
+using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using ve.build.core;
 using ve.build.core.projects;
@@ -13,25 +14,73 @@ using File = ve.build.core.files.File;
 
 namespace ve.build.vcxprojgenerator;
 
-internal class VcxprojGenerator(string file) : IProjectGenerator
+internal abstract class VcxprojGenerator(string name, string tools, string toolset, string file) : IProjectGenerator
 {
-	public string Name => "vs2026";
-	private readonly string file = file;
-	private readonly List<string> _projectFiles = new();
+	public string Name => name;
+
+	public bool IsNative => (vswhere("-latest", "-property", "installationVersion") ?? "0").Split('.').First() ==
+	                        this.Tools.Split('.').First();
+	public string Tools => tools;
+	public string Toolset => toolset;
+	protected readonly string file = file;
+	protected readonly List<string> _projectFiles = new();
+
+	private static string? vswhere(params string[] args)
+	{
+		string vswhere = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Microsoft Visual Studio", "Installer", "vswhere.exe");
+		if (System.IO.File.Exists(vswhere))
+		{
+			var pi = new ProcessStartInfo(vswhere, args);
+			pi.RedirectStandardOutput = true;
+			pi.UseShellExecute = false;
+			pi.CreateNoWindow = true;
+			using var process = Process.Start(pi);
+			process!.WaitForExit();
+			var output = process.StandardOutput.ReadToEnd().Trim();
+			if (process.ExitCode == 0 && string.IsNullOrWhiteSpace(output) == false)
+			{
+				return output;
+			}
+		}
+		return null;
+	}
+
+	private static string makeCommandLine(string? csproj, string[] args)
+	{
+		var currentProcess = Environment.ProcessPath;
+		if (string.IsNullOrWhiteSpace(currentProcess) == false)
+		{
+			if (Path.GetFileNameWithoutExtension(currentProcess).Equals("dotnet", StringComparison.OrdinalIgnoreCase))
+			{
+				if (csproj == null)
+				{
+					throw new Exception("Cannot build without a csproj file when using dotnet");
+				}
+				args = args.Prepend("--").Prepend('"' + csproj + '"').Prepend("--project").Prepend("Release")
+					.Prepend("-c").Prepend("run").ToArray();
+			}
+			return string.Join(' ', args.Prepend('"' + currentProcess + '"'));
+		}
+		throw new Exception("Cannot determine current process path");
+	}
 	public async Task<ActionResult> generateProjectFiles(IBuildContext ctx, IProjectBuilder projectBuilder, File[] files, IEnumerable<IProjectBuilder> dependencies)
 	{
+		string? winSdk = OperatingSystem.IsWindows() ? Registry.LocalMachine.OpenSubKey("SOFTWARE")?.OpenSubKey("WOW6432Node")?.OpenSubKey("Microsoft")?.OpenSubKey("Microsoft SDKs")?.OpenSubKey("Windows")?
+			.OpenSubKey("v10.0")?.GetValue("InstallationFolder") as string : null;
+		Version winSdkVersion = winSdk != null ? Directory.EnumerateDirectories(Path.Join(winSdk, "Lib")).Select(d => new Version(Path.GetFileName(d))).OrderBy(d => d)
+			.LastOrDefault(new Version("10.0.19041.0")) : new Version("10.0.19041.0");
 		var primaryCsproj = this._foundCsproj(this.file);
-		var dotnetCommand = $"dotnet run -c Release --project \"${primaryCsproj}\" -- ";
 		var path = this.projectFile(projectBuilder);
 		var filter = path + ".filters";
-		var dirs = files.Concat(dependencies.SelectMany(d => d.SourceFiles))
+		var projectBuilders = dependencies as IProjectBuilder[] ?? dependencies.ToArray();
+		var dirs = files.Concat(projectBuilders.SelectMany(d => d.SourceFiles))
 			.Select(f => Path.GetDirectoryName(f.Path)!).ToHashSet();
-		var defines = dependencies.SelectMany(d => d.Defines()).Select(d => d.Value != null ? d.Key + "=" + d.Value : d.Key).Prepend("dllexport=__declspec(dllexport)");
+		var defines = projectBuilders.SelectMany(d => d.Defines()).Select(d => d.Value != null ? d.Key + "=" + d.Value : d.Key).Prepend("dllexport=__declspec(dllexport)");
 		XNamespace ns = "http://schemas.microsoft.com/developer/msbuild/2003";
 		var configurations = ctx.Configurations.SelectMany(c => ctx.Platforms.Select(p => new KeyValuePair<string, string>(c.ToString(), p.Name))).ToArray();
 		var project = new XElement(ns + "Project",
 			new XAttribute("DefaultTargets", "Build"),
-			new XAttribute("ToolsVersion", "17.0"),
+			new XAttribute("ToolsVersion", this.Tools),
 			new XElement(ns + "ItemGroup",
 				new XAttribute("Label", "ProjectConfigurations"),
 				configurations.Select(c => new XElement(ns + "ProjectConfiguration",
@@ -42,26 +91,26 @@ internal class VcxprojGenerator(string file) : IProjectGenerator
 			),
 			new XElement(ns + "PropertyGroup",
 				new XAttribute("Label", "Globals"),
-				new XElement(ns + "VCProjectVersion", "17.0"),
+				new XElement(ns + "VCProjectVersion", this.Tools),
 				new XElement(ns + "Keyword", "MakeFileProj"),
 				new XElement(ns + "ProjectGuid", $"{{{GenerateGuid(path)}}}"),
-				new XElement(ns + "WindowsTargetPlatformVersion", "10.0")
+				new XElement(ns + "WindowsTargetPlatformVersion", winSdkVersion.ToString())
 			),
 			new XElement(ns + "Import", new XAttribute("Project", @"$(VCTargetsPath)\Microsoft.Cpp.Default.props")),
 			new XElement(ns + "PropertyGroup",
 				new XAttribute("Label", "Configuration"),
 				new XElement(ns + "ConfigurationType", "Makefile"),
-				new XElement(ns + "PlatformToolset", "v143")
+				new XElement(ns + "PlatformToolset", this.Toolset)
 			),
 			new XElement(ns + "Import", new XAttribute("Project", @"$(VCTargetsPath)\Microsoft.Cpp.props")),
 			await Task.WhenAll(configurations.Select(async c => new XElement(ns + "PropertyGroup",
 					new XAttribute("Condition", $"'$(Configuration)|$(Platform)'=='{c.Key}|{c.Value}'"),
-					new XElement(ns + "NMakeBuildCommandLine", $"{dotnetCommand} build --config={c.Key} --platform={c.Value} --project={projectBuilder.Name}"),
-					new XElement(ns + "NMakeReBuildCommandLine", $"{dotnetCommand} rebuild --config={c.Key} --platform={c.Value} --project={projectBuilder.Name}"),
-					new XElement(ns + "NMakeCleanCommandLine", $"{dotnetCommand} clean --config={c.Key} --platform={c.Value} --project={projectBuilder.Name}"),
+					new XElement(ns + "NMakeBuildCommandLine", makeCommandLine(primaryCsproj, ["build", $"--config={c.Key}", $"--platform={c.Value}", $"--project={projectBuilder.Name}"])),
+					new XElement(ns + "NMakeReBuildCommandLine", makeCommandLine(primaryCsproj, ["rebuild", $"--config={c.Key}", $"--platform={c.Value}", $"--project={projectBuilder.Name}"])),
+					new XElement(ns + "NMakeCleanCommandLine", makeCommandLine(primaryCsproj, ["clean", $"--config={c.Key}", $"--platform={c.Value}", $"--project={projectBuilder.Name}"])),
 					new XElement(ns + "NMakeIncludeSearchPath", string.Join(';', dirs)),
 					new XElement(ns + "NMakePreprocessorDefinitions", "$(NMakePreprocessorDefinitions);" + string.Join(';', defines)),
-					new XElement(ns + "NMakeForcedIncludes", await this.generateForceInclude(projectBuilder, dependencies, c)),
+					new XElement(ns + "NMakeForcedIncludes", await this.generateForceInclude(projectBuilder, projectBuilders, c)),
 					new XElement(ns + "AdditionalOptions", "/std:c++latest"),
 					new XElement(ns + "NMakeOutput", Path.Join(projectBuilder.Path, "bin", c.Value, c.Key, Path.ChangeExtension(projectBuilder.Name + ".",
 							ctx.Platforms.First(p => p.Name == c.Value).getExtension(projectBuilder.GetProjectType() switch
@@ -83,7 +132,7 @@ internal class VcxprojGenerator(string file) : IProjectGenerator
 			new XElement(ns + "ItemGroup", files.Select(f => new XElement(ns + (f.IsCpp() ?
 					"ClCompile" : (f.IsHeader() ? "ClInclude" : "None")),
 				new XAttribute("Include", f.Path)))),
-			new XElement(ns + "ItemGroup", dependencies.Select(d => new XElement(ns + "ProjectReference",
+			new XElement(ns + "ItemGroup", projectBuilders.Select(d => new XElement(ns + "ProjectReference",
 					new XAttribute("Include", projectFile(d)),
 					new XElement(ns + "Project", $"{{{GenerateGuid(projectFile(d))}}}")
 				))),
@@ -95,7 +144,6 @@ internal class VcxprojGenerator(string file) : IProjectGenerator
 		);
 		await using var stream = System.IO.File.Create(path);
 		await doc.SaveAsync(stream, SaveOptions.None, CancellationToken.None);
-		this._projectFiles.Add(path);
 		var filters = new XElement(ns + "Project",
 			new XAttribute("ToolsVersion", "4.0"),
 			new XElement(ns + "ItemGroup",
@@ -155,16 +203,77 @@ internal class VcxprojGenerator(string file) : IProjectGenerator
 		return Path.Join(projectBuilder.Path, "obj", $"{projectBuilder.Name}.vcxproj");
 	}
 
-	public void finalStep(ITaskBuilder taskBuilder)
+	public abstract void finalStep(ITaskBuilder taskBuilder);
+
+	public void setupProject(string file)
+	{
+		if (this._projectFiles.Contains(file) == false)
+		{
+			this._projectFiles.Add(file);
+		}
+	}
+
+	protected bool _hasCsproj(string sln, string csproj)
+	{
+		return this.csProjects(sln, null).FirstOrDefault(p => p == csproj) != null;
+	}
+
+	protected abstract IEnumerable<string> csProjects(string sln, string? primaryProject);
+
+	protected string? _foundCsproj(string path)
+	{
+		while (string.IsNullOrWhiteSpace(path) == false)
+		{
+			var dir = Path.GetDirectoryName(path)!;
+			var csproj = Directory.EnumerateFiles(dir, "*.csproj").FirstOrDefault();
+			if (csproj != null)
+			{
+				return csproj;
+			}
+		}
+
+		return null;
+	}
+}
+
+internal class Vcxproj2022(string file) : VcxprojGenerator("vs2022", "17.0", "v143", file)
+{
+	private string? _foundSln(string path)
+	{
+		var csproj = this._foundCsproj(path) ?? Environment.ProcessPath;
+		path = csproj;
+		while (string.IsNullOrWhiteSpace(path) == false)
+		{
+			path = Path.GetDirectoryName(path)!;
+			if (string.IsNullOrWhiteSpace(path)) break;
+			var sln = Directory.EnumerateFiles(path, "*.sln").FirstOrDefault(sln => this._hasCsproj(sln, csproj));
+			if (sln != null)
+			{
+				return sln;
+			}
+		}
+
+		return null;
+	}
+	public override void finalStep(ITaskBuilder taskBuilder)
 	{
 		var primaryCsproj = this._foundCsproj(this.file);
 		var sln = this._foundSln(this.file) ?? Path.ChangeExtension(primaryCsproj, ".sln");
-		var csprojects = this.csProjects(sln);
+		var currentProcess = Environment.ProcessPath;
+		if (string.IsNullOrWhiteSpace(currentProcess) == false && primaryCsproj == null)
+		{
+			if (Path.GetFileNameWithoutExtension(currentProcess).Equals("dotnet", StringComparison.OrdinalIgnoreCase))
+			{
+				throw new Exception("Cannot build without a csproj file when using dotnet");
+			}
+			sln = Path.ChangeExtension(this.file, ".sln");
+		}
+		var csprojects = this.csProjects(sln, primaryCsproj).ToArray();
 		taskBuilder.buildAction($"gsf:{sln}", $"Generate {sln}", () => this._projectFiles.Select(p => $"gpf:{Path.GetFileNameWithoutExtension(p)}"),
 			async ctx =>
 			{
 				var configurations = ctx.Configurations.SelectMany(c => ctx.Platforms.Select(p => new KeyValuePair<string, string>(c.ToString(), p.Name))).ToArray();
-				using var writer = new StreamWriter(System.IO.File.Create(sln));
+				using var writer = new StreamWriter(System.IO.File.Create(sln!));
 				await writer.WriteLineAsync("Microsoft Visual Studio Solution File, Format Version 12.00");
 				await writer.WriteLineAsync("# Visual Studio Version 17");
 				await writer.WriteLineAsync("VisualStudioVersion = 17.0.31903.59");
@@ -180,7 +289,10 @@ internal class VcxprojGenerator(string file) : IProjectGenerator
 					await writer.WriteLineAsync(
 						$"Project(\"{{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}}\") = \"{Path.GetFileNameWithoutExtension(vcxproj)}\", \"{vcxproj}\", \"{{{GenerateGuid(vcxproj).ToString()}}}\"");
 					await writer.WriteLineAsync("\tProjectSection(ProjectDependencies) = postProject");
-					await writer.WriteLineAsync($"\t\t{{{GenerateGuid(primaryCsproj)}}} = {{{GenerateGuid(primaryCsproj)}}}");
+					if (primaryCsproj != null)
+					{
+						await writer.WriteLineAsync($"\t\t{{{GenerateGuid(primaryCsproj)}}} = {{{GenerateGuid(primaryCsproj)}}}");
+					}
 					await writer.WriteLineAsync("\tEndProjectSection");
 					await writer.WriteLineAsync("EndProject");
 				}
@@ -217,63 +329,104 @@ internal class VcxprojGenerator(string file) : IProjectGenerator
 			});
 	}
 
-	public void setupProject(string file)
+	protected override IEnumerable<string> csProjects(string sln, string? primaryProject)
 	{
-		if (this._projectFiles.Contains(file) == false)
-		{
-			this._projectFiles.Add(file);
-		}
-	}
-
-	private string? _foundSln(string path)
-	{
-		var csproj = this._foundCsproj(path);
-		path = csproj;
-		while (string.IsNullOrWhiteSpace(path) == false)
-		{
-			path = Path.GetDirectoryName(path)!;
-			var sln = Directory.EnumerateFiles(path, "*.sln").FirstOrDefault(sln => this._hasCsproj(sln, csproj));
-			if (sln != null)
-			{
-				return sln;
-			}
-		}
-
-		return null;
-	}
-
-	private bool _hasCsproj(string sln, string csproj)
-	{
-		return this.csProjects(sln).FirstOrDefault(p => p == csproj) != null;
-	}
-
-	private IEnumerable<string> csProjects(string sln)
-	{
+		if (System.IO.File.Exists(sln) == false) return primaryProject != null ? [primaryProject] : [];
 		var dir = Path.GetDirectoryName(sln)!;
 		return System.IO.File.ReadAllLines(sln)
 			.Where(l => l.Trim().StartsWith("Project(\"{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}\") = "))
 			.Select(l => l.Split(',').Take(new Range(1, 2)).First())
 			.Select(l => l.Trim().Trim('"')).Select(p => Path.IsPathFullyQualified(p) ? p : Path.Join(dir, p));
 	}
-
-	private string _foundCsproj(string path)
+}
+internal class Vcxproj2026(string file) : VcxprojGenerator("vs2026", "18.0", "v144", file)
+{
+	private string? _foundSln(string path)
 	{
+		var csproj = this._foundCsproj(path) ?? Environment.ProcessPath;
+		path = csproj;
 		while (string.IsNullOrWhiteSpace(path) == false)
 		{
-			var dir = Path.GetDirectoryName(path)!;
-			var csproj = Directory.EnumerateFiles(dir, "*.csproj").FirstOrDefault();
-			if (csproj != null)
+			path = Path.GetDirectoryName(path)!;
+			if (string.IsNullOrWhiteSpace(path)) break;
+			var sln = Directory.EnumerateFiles(path, "*.slnx").FirstOrDefault(sln => this._hasCsproj(sln, csproj));
+			if (sln != null)
 			{
-				return csproj;
+				return sln;
 			}
 		}
-		throw new Exception("");
+		return null;
+	}
+	public override void finalStep(ITaskBuilder taskBuilder)
+	{
+		var primaryCsproj = this._foundCsproj(this.file);
+		var sln = this._foundSln(this.file) ?? Path.ChangeExtension(primaryCsproj, ".slnx");
+		var currentProcess = Environment.ProcessPath;
+		if (string.IsNullOrWhiteSpace(currentProcess) == false && primaryCsproj == null)
+		{
+			if (Path.GetFileNameWithoutExtension(currentProcess).Equals("dotnet", StringComparison.OrdinalIgnoreCase))
+			{
+				throw new Exception("Cannot build without a csproj file when using dotnet");
+			}
+			sln = Path.ChangeExtension(this.file, ".slnx");
+		}
+		var csprojects = this.csProjects(sln!, primaryCsproj).ToArray();
+		taskBuilder.buildAction($"gsf:{sln}", $"Generate {sln}", () => this._projectFiles.Select(p => $"gpf:{Path.GetFileNameWithoutExtension(p)}"),
+			async ctx =>
+			{
+				await using var filterStream = System.IO.File.Create(sln!);
+				await new XDocument(
+					new XElement("Solution",
+						new XElement("Configurations",
+							ctx.Configurations.Select(c => new XElement("BuildType", new XAttribute("Name", c.ToString()))),
+							ctx.Platforms.Select(p => new XElement("Platform", new XAttribute("Name", p.Name)))),
+						csprojects.Select(csproj => new XElement("Project",
+							new XAttribute("Path", csproj),
+							new XElement("BuildType", new XAttribute("Project", "Release")))),
+						this._projectFiles.Select(vcxproj => new XElement("Project",
+							new XAttribute("Path", vcxproj),
+							new XAttribute("Id", GenerateGuid(vcxproj)),
+							primaryCsproj != null ? new XElement("BuildDependency",
+								new XAttribute("Project", primaryCsproj)) : null)))
+					).SaveAsync(filterStream, SaveOptions.None, CancellationToken.None);
+				return ActionResult.SUCCESS;
+			});
+	}
+
+	protected override IEnumerable<string> csProjects(string sln, string? primaryProject)
+	{
+		if (System.IO.File.Exists(sln) == false) return primaryProject != null ? [primaryProject] : [];
+		using var steam = System.IO.File.OpenRead(sln);
+		try
+		{
+			List<string> projects = new();
+			var slnDoc = XDocument.Load(steam);
+			this._scanProjectsRecurse(slnDoc, projects);
+			return projects;
+		}
+		catch
+		{
+			return primaryProject != null ? [primaryProject] : [];
+		}
+	}
+
+	private void _scanProjectsRecurse(XContainer slnDoc, List<string> projects)
+	{
+		foreach (var csproj in slnDoc.Elements("Project").Select(p => p.Attribute("Path")).Where(a => a != null).Select(a => a!.Value).Where(p => Path.GetExtension(p) == ".csproj"))
+		{
+			projects.Add(csproj);
+		}
+
+		foreach (var element in slnDoc.Elements())
+		{
+			this._scanProjectsRecurse(element, projects);
+		}
 	}
 }
 public static class VcxprojGeneratorExtension
 {
 	public static HostBuilder useVcxprojGenerator(this HostBuilder builder, [CallerFilePath] string? file = null)
 	{
-		return builder.setupProjectGenerator(new VcxprojGenerator(file!));
+		return builder.setupProjectGenerator(new Vcxproj2022(file!)).setupProjectGenerator(new Vcxproj2026(file!));
 	}
 }
