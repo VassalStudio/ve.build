@@ -176,7 +176,16 @@ public static class LinkExtension
 				tb.copy(outputFile, getOutFile(p), () => [$"link:{outputFile.Path}"]);
 			}
 		}));
-		return builder.sources(files => builder.dependencies(deps => builder.task("build",
+		return builder.task("build", tbuilder => {
+			tbuilder.eachProject(dp =>
+			{
+				var target = dp.outputFile(builder.Name + ".").changeExtension(FileType.SHARED_LIBRARY);
+				if (dp.Dependencies.Contains(builder.Name) && string.Equals(outputFile.Path, target.Path) == false)
+				{
+					tbuilder.copy(outputFile, target, () => [$"link:{outputFile.Path}"]);
+				}
+			});
+		}).sources(files => builder.dependencies(deps => builder.task("build",
 			tbuilder =>
 			{
 				files = files.Where(f => f.IsCpp())
@@ -187,14 +196,7 @@ public static class LinkExtension
 						tbuilder.Lib(outputFile, configurator, files);
 						break;
 					case ProjectType.DLL:
-						tbuilder.Link(outputFile, ctx => linkConfigurator(ctx.dynamicLibrary(true)), files).eachProject(dp =>
-						{
-							var target = dp.outputFile(builder.Name + ".").changeExtension(FileType.SHARED_LIBRARY);
-							if (dp.Dependencies.Contains(builder.Name) && string.Equals(outputFile.Path, target.Path) == false)
-							{
-								tbuilder.copy(outputFile, target, () => [$"link:{outputFile.Path}"]);
-							}
-						});
+						tbuilder.Link(outputFile, ctx => linkConfigurator(ctx.dynamicLibrary(true)), files);
 						break;
 					case ProjectType.EXE:
 						tbuilder.Link(outputFile, linkConfigurator, files);
