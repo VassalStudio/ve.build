@@ -8,7 +8,7 @@
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <PackageId>VEBuild.Cpp.Msvc</PackageId>
     <Title>ve.build.cpp.msvc</Title>
-    <Version>1.0.0.3-rc</Version>
+    <Version>1.0.0.4-rc</Version>
     <Authors>VassalStudio</Authors>
     <Description>VEBuild is a modular .NET build system that composes projects via declarative tasks, extensions, and platforms.  
 This repo contains the core abstractions and a sandbox used to validate the architecture.</Description>
@@ -19,7 +19,7 @@ This repo contains the core abstractions and a sandbox used to validate the arch
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="VEBuild.Cpp" Version="1.0.0.3-rc" />
+    <PackageReference Include="VEBuild.Cpp" Version="1.0.0.4-rc" />
   </ItemGroup>
 
   <ItemGroup>
