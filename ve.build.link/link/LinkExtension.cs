@@ -187,7 +187,14 @@ public static class LinkExtension
 						tbuilder.Lib(outputFile, configurator, files);
 						break;
 					case ProjectType.DLL:
-						tbuilder.Link(outputFile, ctx => linkConfigurator(ctx.dynamicLibrary(true)), files);
+						tbuilder.Link(outputFile, ctx => linkConfigurator(ctx.dynamicLibrary(true)), files).eachProject(dp =>
+						{
+							var target = dp.outputFile(builder.Name + ".").changeExtension(FileType.SHARED_LIBRARY);
+							if (dp.Dependencies.Contains(builder.Name) && string.Equals(outputFile.Path, target.Path) == false)
+							{
+								tbuilder.copy(outputFile, target, () => [$"link:{outputFile.Path}"]);
+							}
+						});
 						break;
 					case ProjectType.EXE:
 						tbuilder.Link(outputFile, linkConfigurator, files);
