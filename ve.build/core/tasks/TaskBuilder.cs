@@ -43,7 +43,7 @@ internal class TaskBuilder : ITaskBuilder
 
 	public ITaskBuilder eachProject(Action<IProjectBuilder> builderAction)
 	{
-		this._task.ProjectActions = this._task.ProjectActions.Append(builderAction).ToArray();
+		this._task.ProjectActions.Add(builderAction);
 		return this;
 	}
 

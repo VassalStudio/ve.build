@@ -16,10 +16,9 @@ internal class Task
 		this.Name = name;
 		this.Description = description;
 		this._dependencies = Array.Empty<Task>();
-		this.ProjectActions = Array.Empty<Action<IProjectBuilder>>();
 	}
 
-	public Action<IProjectBuilder>[] ProjectActions { get; set; }
+	public List<Action<IProjectBuilder>> ProjectActions { get; } = new();
 
 
 	public Task resolveDependencies(Task[] tasks)
