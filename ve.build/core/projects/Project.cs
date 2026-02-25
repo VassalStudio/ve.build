@@ -1,5 +1,4 @@
-﻿using ve.build.core.buildgraph;
-
+﻿using Task = ve.build.core.tasks.Task;
 namespace ve.build.core.projects;
 
 internal class Project
@@ -23,7 +22,7 @@ internal class Project
 	public List<Project> Dependencies { get; } = new();
 	public List<Project> PrivateDependencies { get; } = new();
 
-	public Project resolveDependencies(Project[] projects, Dictionary<string, bool> dependencies)
+	public Project resolveDependencies(Project[] projects, Dictionary<string, bool> dependencies, Task task)
 	{
 		this.Dependencies.AddRange(projects.Where(p => dependencies.TryGetValue(p.Name, out bool publicDependency) && publicDependency));
 		this._addrecursiveDependencies(this.Dependencies, this.Dependencies);
@@ -33,6 +32,10 @@ internal class Project
 		var privateDependencies = this.PrivateDependencies.Select(p => p._builder).ToArray();
 		var deps = publicDependencies.Select(d => new KeyValuePair<IProjectBuilder, bool>(d, true))
 			.Concat(privateDependencies.Select(d => new KeyValuePair<IProjectBuilder, bool>(d, false))).ToDictionary();
+		foreach (var projectAction in task.ProjectActions)
+		{
+			projectAction(this._builder);
+		}
 		foreach (var builder in this._builder.DependencyCallbacks)
 		{
 			builder(deps);

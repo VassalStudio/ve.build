@@ -19,15 +19,10 @@ internal class ProjectDescription
 		this.Path = path;
 	}
 
-	public KeyValuePair<Project, Dictionary<string, bool>> buildProject(List<Action<IProjectBuilder>> actions,
-		ITaskBuilder taskBuilder, Func<FileType, string> getExtFunc)
+	public KeyValuePair<Project, Dictionary<string, bool>> buildProject(ITaskBuilder taskBuilder, Func<FileType, string> getExtFunc)
 	{
 		var projectBuilder = new ProjectBuilder(taskBuilder, this.Name, this.Path, this.Output, this.Intermediate, getExtFunc);
 		foreach (var builder in this.Builders)
-		{
-			builder(projectBuilder);
-		}
-		foreach (var builder in actions)
 		{
 			builder(projectBuilder);
 		}

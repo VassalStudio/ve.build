@@ -24,6 +24,7 @@ public interface IProjectBuilder
 	File outputFile(File path);
 	File[] SourceFiles { get; }
 	IEnumerable<string> Dependencies { get; }
+	IEnumerable<string> PrivateDependencies { get; }
 	IProjectBuilder sources(Action<File[]> files);
 	IProjectBuilder makeSourceFile(File f);
 	IProjectBuilder dependencies(Action<IReadOnlyDictionary<IProjectBuilder, bool>> dependencies);
@@ -115,6 +116,7 @@ internal class ProjectBuilder : IProjectBuilder
 
 	public File[] SourceFiles => this._sourceFiles.ToArray();
 	public IEnumerable<string> Dependencies => this._dependencies.Keys.Concat(this._dependencies.Where(k => k.Value).SelectMany(d => new string[]{}));
+	public IEnumerable<string> PrivateDependencies => this._dependencies.Where(k => k.Value == false).Select(k => k.Key);
 
 	public IProjectBuilder sources(Action<File[]> files)
 	{

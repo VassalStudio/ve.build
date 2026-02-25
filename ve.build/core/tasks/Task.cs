@@ -55,7 +55,7 @@ internal class Task
 		{
 			var pair = projects.First(p => p.Value.All(d => resolved.Select(r => r.Name).Contains(d.Key)) && resolved.Contains(p.Key) == false);
 			var project = pair.Key;
-			project.resolveDependencies(projects.Keys.ToArray(), pair.Value);
+			project.resolveDependencies(projects.Keys.ToArray(), pair.Value, this);
 			resolved.Add(project);
 		}
 		var dag = new Dag(this.BuildNodes.ToArray());
@@ -68,7 +68,7 @@ internal class Task
 
 	private Dictionary<Project, Dictionary<string, bool>> buildProject(ProjectDescription[] projects, Func<FileType, string> getExtFunc)
 	{
-		return projects.Select(p => p.buildProject(this.ProjectActions, this._builder, getExtFunc)).ToDictionary();
+		return projects.Select(p => p.buildProject(this._builder, getExtFunc)).ToDictionary();
 	}
 
 	public void printHelp()
