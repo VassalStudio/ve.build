@@ -169,23 +169,22 @@ public static class LinkExtension
 	{
 		_projectTypes[builder] = type;
 		var outputFile = getOutFile(builder);
-		var copyToOutput = (ITaskBuilder tb) => tb.eachProject(p => p.dependencies(d =>
+		if (type == ProjectType.DLL)
 		{
-			if (d.Select(d => d.Key.Name).Contains(builder.Name))
+			builder.task("build", tbuilder =>
 			{
-				tb.copy(outputFile, getOutFile(p), () => [$"link:{outputFile.Path}"]);
-			}
-		}));
-		return builder.task("build", tbuilder => {
-			tbuilder.eachProject(dp =>
-			{
-				var target = dp.outputFile(builder.Name + ".").changeExtension(FileType.SHARED_LIBRARY);
-				if (dp.Dependencies.Contains(builder.Name) && string.Equals(outputFile.Path, target.Path) == false)
+				tbuilder.eachProject(dp =>
 				{
-					tbuilder.copy(outputFile, target, () => [$"link:{outputFile.Path}"]);
-				}
+					var target = dp.outputFile(builder.Name + ".").changeExtension(FileType.SHARED_LIBRARY);
+					bool hasDependency = dp.Dependencies.Contains(builder.Name)/* || dp.PrivateDependencies.Contains(builder.Name)*/;
+					if (hasDependency && string.Equals(outputFile.Path, target.Path) == false)
+					{
+						tbuilder.copy(outputFile, target, () => [$"link:{outputFile.Path}"]);
+					}
+				});
 			});
-		}).sources(files => builder.dependencies(deps => builder.task("build",
+		}
+		return builder.sources(files => builder.dependencies(deps => builder.task("build",
 			tbuilder =>
 			{
 				files = files.Where(f => f.IsCpp())
