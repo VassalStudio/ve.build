@@ -65,21 +65,61 @@ internal class BaseConfigurator : IClConfigurator
 		pi.UseShellExecute = false;
 		pi.CreateNoWindow = true;
 		using var process = Process.Start(pi);
-		await process!.WaitForExitAsync();
-		var output = await process.StandardOutput.ReadToEndAsync();
-		var error = await process.StandardError.ReadToEndAsync();
-		if (process.ExitCode != 0)
+		var outputLineTask = process!.StandardOutput.ReadLineAsync();
+		var errorLineTask = process.StandardError.ReadLineAsync();
+		var exitProcessorTask = process.WaitForExitAsync();
+		do
 		{
-			ctx.log(LogLevel.ERROR, "MSVC", "Compilation failed:");
-			foreach (var s in error.Split("\n").Where(s => string.IsNullOrWhiteSpace(s) == false))
+			var completedTask = await Task.WhenAny(outputLineTask, errorLineTask, exitProcessorTask);
+			if (completedTask == errorLineTask)
 			{
-				ctx.log(LogLevel.ERROR, "MSVC", s);
+				if (string.IsNullOrWhiteSpace(errorLineTask.Result) == false)
+				{
+					ctx.log(LogLevel.ERROR, "MSVC", errorLineTask.Result);
+				}
+				errorLineTask = process.StandardError.ReadLineAsync();
+			}
+			else if (completedTask == outputLineTask)
+			{
+				if (string.IsNullOrWhiteSpace(outputLineTask.Result) == false && string.Equals(outputLineTask.Result, this.File.Path) == false)
+				{
+					var level = outputLineTask.Result.Contains("fatal error") ? LogLevel.FATAL : (outputLineTask.Result.Contains("error") ? LogLevel.ERROR : (outputLineTask.Result.Contains("warning") ? LogLevel.WARN : LogLevel.INFO));
+					ctx.log(level, "MSVC", outputLineTask.Result);
+				}
+				outputLineTask = process.StandardOutput.ReadLineAsync();
+			}
+			else
+			{
+				var output = await outputLineTask;
+				var error = await errorLineTask;
+				var outputs = await process.StandardOutput.ReadToEndAsync();
+				var errors = await process.StandardError.ReadToEndAsync();
+				foreach (var line in errors.Split(Environment.NewLine).Prepend(error))
+				{
+					if (string.IsNullOrWhiteSpace(line) == false)
+					{
+						ctx.log(LogLevel.ERROR, "MSVC", line);
+					}
+				}
+				foreach (var line in outputs.Split(Environment.NewLine).Prepend(output))
+				{
+					if (string.IsNullOrWhiteSpace(line) == false &&
+					    string.Equals(line.Trim(), this.File.Path) == false)
+					{
+						var level = line.Contains("fatal error")
+							? LogLevel.FATAL
+							: (line.Contains("error")
+								? LogLevel.ERROR
+								: (line.Contains("warning") ? LogLevel.WARN : LogLevel.INFO));
+						ctx.log(level, "MSVC", line);
+					}
+				}
 			}
 		}
-		foreach (var s in output.Split("\n").Where(s => string.IsNullOrWhiteSpace(s) == false))
+		while(process.HasExited == false);
+		if (process.ExitCode != 0)
 		{
-			if (s.Trim() == System.IO.Path.GetFileName(this.File.Path)) continue;
-			ctx.log(s.Contains("fatal error") ? LogLevel.FATAL : (s.Contains("error") ? LogLevel.ERROR : (s.Contains("warning") ? LogLevel.WARN : LogLevel.INFO)), "MSVC", s);
+			ctx.log(LogLevel.ERROR, "MSVC", "COMPILATION FAILED");
 		}
 		return process.ExitCode == 0 ? ActionResult.SUCCESS : ActionResult.FAILURE;
 	}
