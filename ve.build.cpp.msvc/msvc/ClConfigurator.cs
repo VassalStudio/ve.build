@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Text;
 using ve.build.core;
 using ve.build.core.projects;
 using ve.build.core.tasks;
@@ -73,19 +74,14 @@ internal class BaseConfigurator : IClConfigurator
 			var completedTask = await Task.WhenAny(outputLineTask, errorLineTask, exitProcessorTask);
 			if (completedTask == errorLineTask)
 			{
-				if (string.IsNullOrWhiteSpace(errorLineTask.Result) == false)
-				{
-					ctx.log(LogLevel.ERROR, "MSVC", errorLineTask.Result);
-				}
+				var line = errorLineTask.Result;
+				this.printError(ctx, line);
 				errorLineTask = process.StandardError.ReadLineAsync();
 			}
 			else if (completedTask == outputLineTask)
 			{
-				if (string.IsNullOrWhiteSpace(outputLineTask.Result) == false && string.Equals(outputLineTask.Result, this.File.Path) == false)
-				{
-					var level = outputLineTask.Result.Contains("fatal error") ? LogLevel.FATAL : (outputLineTask.Result.Contains("error") ? LogLevel.ERROR : (outputLineTask.Result.Contains("warning") ? LogLevel.WARN : LogLevel.INFO));
-					ctx.log(level, "MSVC", outputLineTask.Result);
-				}
+				var line = outputLineTask.Result;
+				this.printOutput(ctx, line);
 				outputLineTask = process.StandardOutput.ReadLineAsync();
 			}
 			else
@@ -96,32 +92,44 @@ internal class BaseConfigurator : IClConfigurator
 				var errors = await process.StandardError.ReadToEndAsync();
 				foreach (var line in errors.Split(Environment.NewLine).Prepend(error))
 				{
-					if (string.IsNullOrWhiteSpace(line) == false)
-					{
-						ctx.log(LogLevel.ERROR, "MSVC", line);
-					}
+					this.printError(ctx, line);
 				}
 				foreach (var line in outputs.Split(Environment.NewLine).Prepend(output))
 				{
-					if (string.IsNullOrWhiteSpace(line) == false &&
-					    string.Equals(line.Trim(), this.File.Path) == false)
-					{
-						var level = line.Contains("fatal error")
-							? LogLevel.FATAL
-							: (line.Contains("error")
-								? LogLevel.ERROR
-								: (line.Contains("warning") ? LogLevel.WARN : LogLevel.INFO));
-						ctx.log(level, "MSVC", line);
-					}
+					this.printOutput(ctx, line);
 				}
 			}
 		}
-		while(process.HasExited == false);
+		while(process.HasExited == false || process.StandardOutput.EndOfStream == false || process.StandardError.EndOfStream == false);
 		if (process.ExitCode != 0)
 		{
 			ctx.log(LogLevel.ERROR, "MSVC", "COMPILATION FAILED");
 		}
 		return process.ExitCode == 0 ? ActionResult.SUCCESS : ActionResult.FAILURE;
+	}
+
+	protected void printOutput(IBuildContext ctx, string? line, LogLevel level)
+	{
+		if (string.IsNullOrWhiteSpace(line) == false && string.Equals(line, System.IO.Path.GetFileName(this.File.Path)) == false)
+		{
+			ctx.log(level, "MSVC", line);
+		}
+	}
+	protected void printOutput(IBuildContext ctx, string? line)
+	{
+		if (string.IsNullOrWhiteSpace(line) == false && string.Equals(line, System.IO.Path.GetFileName(this.File.Path)) == false)
+		{
+			var level = line.Contains("fatal error") ? LogLevel.FATAL : (line.Contains("error") ? LogLevel.ERROR : (line.Contains("warning") ? LogLevel.WARN : LogLevel.INFO));
+			this.printOutput(ctx, line, level);
+		}
+	}
+
+	protected void printError(IBuildContext ctx, string? line, LogLevel level = LogLevel.ERROR)
+	{
+		if (string.IsNullOrWhiteSpace(line) == false)
+		{
+			ctx.log(level, "MSVC", line);
+		}
 	}
 
 	public IClConfigurator module(string modulePath)
@@ -459,47 +467,75 @@ internal class ShowDependenciesConfigurator : BaseConfigurator, IScanDependencie
 		pi.UseShellExecute = false;
 		pi.CreateNoWindow = true;
 		using var process = Process.Start(pi);
-		await process!.WaitForExitAsync();
-		var output = await process.StandardOutput.ReadToEndAsync();
-		var error = await process.StandardError.ReadToEndAsync();
-		if (process.ExitCode != 0)
+		var outputLineTask = process!.StandardOutput.ReadLineAsync();
+		var errorLineTask = process.StandardError.ReadLineAsync();
+		var processExitTask = process.WaitForExitAsync();
+		var output = new StringBuilder();
+		do
 		{
-			ctx.log(LogLevel.ERROR, "MSVC", "Compilation failed:");
-			foreach (var s in error.Split("\n").Where(s => string.IsNullOrWhiteSpace(s) == false))
+			var completedTask = await Task.WhenAny(outputLineTask, errorLineTask, processExitTask);
+			if (completedTask == errorLineTask)
 			{
-				if (s.Trim() == System.IO.Path.GetFileName(this.File.Path)) continue;
-				ctx.log(LogLevel.ERROR, "MSVC", s);
+				var line = errorLineTask.Result;
+				this.handleErrorLine(ctx, line);
 			}
-		}
-		else
-		{
-			foreach (var s in error.Split("\n").Where(s => string.IsNullOrWhiteSpace(s) == false))
+			else if (completedTask == outputLineTask)
 			{
-				ctx.log(LogLevel.VERBOSE, "MSVC", s);
-				if (s.Trim() == System.IO.Path.GetFileName(this.File.Path)) continue;
-				if (s.StartsWith("Note: including file:"))
+				var line = outputLineTask.Result;
+				this.printOutput(ctx, line);
+				output.AppendLine(line);
+			}
+			else
+			{
+				var errorLine = await errorLineTask;
+				var outputLine = await outputLineTask;
+				var errors = await process.StandardError.ReadToEndAsync();
+				var outputs = await process.StandardOutput.ReadToEndAsync();
+				foreach (var line in errors.Split(Environment.NewLine).Prepend(errorLine))
 				{
-					var dep = s.Replace("Note: including file:", "").Trim();
-					ctx.log(LogLevel.DEBUG, "MSVC", $"Detected include file: {dep}");
-					this._includes.Add(dep);
+					this.handleErrorLine(ctx, line);
+				}
+
+				foreach (var line in outputs.Split(Environment.NewLine).Prepend(outputLine))
+				{
+					this.printOutput(ctx, line);
+					output.AppendLine(line);
 				}
 			}
-			foreach (var s in output.Split("\n").Where(s => string.IsNullOrWhiteSpace(s) == false))
+		} while (process.HasExited == false);
+
+		if (process.ExitCode != 0)
+		{
+			ctx.log(LogLevel.ERROR, "MSVC", "COMPILATION FAILED");
+		}
+		var deps = Dependency.FromJson(output.ToString());
+		foreach (var dep in deps.Rules.SelectMany(r => r.Requires).Select(r => r.LogicalName))
+		{
+			ctx.log(LogLevel.DEBUG, "MSVC", $"Detected dependency module: {dep}");
+			this._dependencies.Add(dep);
+		}
+		foreach (var dep in deps.Rules.SelectMany(r => r.Provides).Select(r => r.LogicalName))
+		{
+			ctx.log(LogLevel.DEBUG, "MSVC", $"Provided dependency module: {dep} at path {this.File.Path}");
+			this._providedDependencies.Add(dep, this.File.Path);
+			if (dep.Contains(':'))
 			{
-				ctx.log(LogLevel.VERBOSE, "MSVC", s);
-			}
-			var deps = Dependency.FromJson(output);
-			foreach (var dep in deps.Rules.SelectMany(r => r.Requires).Select(r => r.LogicalName))
-			{
-				ctx.log(LogLevel.DEBUG, "MSVC", $"Detected dependency module: {dep}");
-				this._dependencies.Add(dep);
-			}
-			foreach (var dep in deps.Rules.SelectMany(r => r.Provides).Select(r => r.LogicalName))
-			{
-				ctx.log(LogLevel.DEBUG, "MSVC", $"Provided dependency module: {dep} at path {this.File.Path}");
-				this._providedDependencies.Add(dep, this.File.Path);
+				var mainDep = dep.Split(':');
+				ctx.log(LogLevel.DEBUG, "MSVC", $"Detected dependency module: {mainDep[0]}");
+				this._dependencies.Add(mainDep[0]);
 			}
 		}
 		return process.ExitCode == 0 ? ActionResult.SUCCESS : ActionResult.FAILURE;
+	}
+
+	private void handleErrorLine(IBuildContext ctx, string? line)
+	{
+		this.printError(ctx, line, LogLevel.VERBOSE);
+		if (string.IsNullOrWhiteSpace(line) == false && line.StartsWith("Note: including file:"))
+		{
+			var dep = line.Replace("Note: including file:", "").Trim();
+			ctx.log(LogLevel.DEBUG, "MSVC", $"Detected include file: {dep}");
+			this._includes.Add(dep);
+		}
 	}
 }
