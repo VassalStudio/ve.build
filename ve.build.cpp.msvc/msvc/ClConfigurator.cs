@@ -69,7 +69,7 @@ internal class BaseConfigurator : IClConfigurator
 		var outputLineTask = process!.StandardOutput.ReadLineAsync();
 		var errorLineTask = process.StandardError.ReadLineAsync();
 		var exitProcessorTask = process.WaitForExitAsync();
-		do
+		while (true)
 		{
 			var completedTask = await Task.WhenAny(outputLineTask, errorLineTask, exitProcessorTask);
 			if (completedTask == errorLineTask)
@@ -98,9 +98,9 @@ internal class BaseConfigurator : IClConfigurator
 				{
 					this.printOutput(ctx, line);
 				}
+				break;
 			}
 		}
-		while(process.HasExited == false || process.StandardOutput.EndOfStream == false || process.StandardError.EndOfStream == false);
 		if (process.ExitCode != 0)
 		{
 			ctx.log(LogLevel.ERROR, "MSVC", "COMPILATION FAILED");
@@ -471,7 +471,7 @@ internal class ShowDependenciesConfigurator : BaseConfigurator, IScanDependencie
 		var errorLineTask = process.StandardError.ReadLineAsync();
 		var processExitTask = process.WaitForExitAsync();
 		var output = new StringBuilder();
-		do
+		while (true)
 		{
 			var completedTask = await Task.WhenAny(outputLineTask, errorLineTask, processExitTask);
 			if (completedTask == errorLineTask)
@@ -501,8 +501,9 @@ internal class ShowDependenciesConfigurator : BaseConfigurator, IScanDependencie
 					this.printOutput(ctx, line);
 					output.AppendLine(line);
 				}
+				break;
 			}
-		} while (process.HasExited == false);
+		}
 
 		if (process.ExitCode != 0)
 		{
