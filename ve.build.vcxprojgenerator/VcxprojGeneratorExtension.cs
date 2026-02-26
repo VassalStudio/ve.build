@@ -269,10 +269,15 @@ internal class Vcxproj2022(string file) : VcxprojGenerator("vs2022", "17.0", "v1
 			sln = Path.ChangeExtension(this.file, ".sln");
 		}
 		var csprojects = this.csProjects(sln, primaryCsproj).ToArray();
-		taskBuilder.buildAction($"gsf:{sln}", $"Generate {sln}", () => this._projectFiles.Select(p => $"gpf:{Path.GetFileNameWithoutExtension(p)}"),
+		_ = taskBuilder.buildAction($"gsf:{sln}", $"Generate {sln}", () => this._projectFiles.Select(p => $"gpf:{Path.GetFileNameWithoutExtension(p)}"),
 			async ctx =>
 			{
-				var configurations = ctx.Configurations.SelectMany(c => ctx.Platforms.Select(p => new KeyValuePair<string, string>(c.ToString(), p.Name))).ToArray();
+				var configurations = ctx.Configurations.SelectMany(c => ctx.Platforms.Select(p => new KeyValuePair<string, string>(c switch
+				{
+					Configuration.DEBUG => "Debug",
+					Configuration.RELEASE => "Release",
+					_ => c.ToString().Select((c, i) => i == 0 ? Char.ToUpper(c) : Char.ToLower(c)).ToString()
+				}, p.Name))).ToArray();
 				using var writer = new StreamWriter(System.IO.File.Create(sln!));
 				await writer.WriteLineAsync("Microsoft Visual Studio Solution File, Format Version 12.00");
 				await writer.WriteLineAsync("# Visual Studio Version 17");
@@ -378,11 +383,15 @@ internal class Vcxproj2026(string file) : VcxprojGenerator("vs2026", "18.0", "v1
 				await new XDocument(
 					new XElement("Solution",
 						new XElement("Configurations",
-							ctx.Configurations.Select(c => new XElement("BuildType", new XAttribute("Name", c.ToString()))),
+							ctx.Configurations.Select(c => new XElement("BuildType", new XAttribute("Name", c switch
+							{
+								Configuration.DEBUG => "Debug",
+								Configuration.RELEASE => "Release",
+								_ => c.ToString().Select((c, i) => i == 0 ? Char.ToUpper(c) : Char.ToLower(c)).ToString()
+							}))),
 							ctx.Platforms.Select(p => new XElement("Platform", new XAttribute("Name", p.Name)))),
 						csprojects.Select(csproj => new XElement("Project",
-							new XAttribute("Path", csproj),
-							new XElement("BuildType", new XAttribute("Project", "Release")))),
+							new XAttribute("Path", csproj))),
 						this._projectFiles.Select(vcxproj => new XElement("Project",
 							new XAttribute("Path", vcxproj),
 							new XAttribute("Id", GenerateGuid(vcxproj)),
