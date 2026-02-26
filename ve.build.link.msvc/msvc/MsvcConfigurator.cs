@@ -53,31 +53,17 @@ internal class MsvcLibConfigurator : ILibConfigurator
 		var outputLineTask = process!.StandardOutput.ReadLineAsync();
 		var errorLineTask = process.StandardError.ReadLineAsync();
 		var exitProcessorTask = process.WaitForExitAsync();
-		do
+		while (true)
 		{
 			var completedTask = await Task.WhenAny(outputLineTask, errorLineTask, exitProcessorTask);
 			if (completedTask == errorLineTask)
 			{
-				if (string.IsNullOrWhiteSpace(errorLineTask.Result) == false)
-				{
-					ctx.log(LogLevel.ERROR, "MSVC", errorLineTask.Result);
-				}
-
+				this.printError(ctx, await errorLineTask);
 				errorLineTask = process.StandardError.ReadLineAsync();
 			}
 			else if (completedTask == outputLineTask)
 			{
-				if (string.IsNullOrWhiteSpace(outputLineTask.Result) == false &&
-				    string.Equals(outputLineTask.Result.Trim(), this.LibPath) == false)
-				{
-					var level = outputLineTask.Result.Contains("fatal error")
-						? LogLevel.FATAL
-						: (outputLineTask.Result.Contains("error")
-							? LogLevel.ERROR
-							: (outputLineTask.Result.Contains("warning") ? LogLevel.WARN : LogLevel.INFO));
-					ctx.log(level, "MSVC", outputLineTask.Result);
-				}
-
+				this.printOutput(ctx, await outputLineTask);
 				outputLineTask = process.StandardOutput.ReadLineAsync();
 			}
 			else
@@ -88,31 +74,42 @@ internal class MsvcLibConfigurator : ILibConfigurator
 				var errors = await process.StandardError.ReadToEndAsync();
 				foreach(var line in errors.Split(Environment.NewLine).Prepend(error))
 				{
-					if (string.IsNullOrWhiteSpace(line) == false)
-					{
-						ctx.log(LogLevel.ERROR, "MSVC", line);
-					}
+					this.printError(ctx, line);
 				}
 				foreach (var line in outputs.Split(Environment.NewLine).Prepend(output))
 				{
-					if (string.IsNullOrWhiteSpace(line) == false &&
-						string.Equals(line.Trim(), this.LibPath) == false)
-					{
-						var level = line.Contains("fatal error")
-							? LogLevel.FATAL
-							: (line.Contains("error")
-								? LogLevel.ERROR
-								: (line.Contains("warning") ? LogLevel.WARN : LogLevel.INFO));
-						ctx.log(level, "MSVC", line);
-					}
+					this.printOutput(ctx, line);
 				}
 			}
-		} while (process.HasExited == false);
+			break;
+		}
 		if (process.ExitCode != 0)
 		{
 			ctx.log(LogLevel.ERROR, "MSVC", "COMPILATION FAILED");
 		}
 		return process.ExitCode == 0 ? ActionResult.SUCCESS : ActionResult.FAILURE;
+	}
+
+	private void printOutput(IBuildContext ctx, string? outputLineTask)
+	{
+		if (string.IsNullOrWhiteSpace(outputLineTask) == false &&
+		    string.Equals(outputLineTask.Trim(), this.LibPath) == false)
+		{
+			var level = outputLineTask.Contains("fatal error")
+				? LogLevel.FATAL
+				: (outputLineTask.Contains("error")
+					? LogLevel.ERROR
+					: (outputLineTask.Contains("warning") ? LogLevel.WARN : LogLevel.INFO));
+			ctx.log(level, "MSVC", outputLineTask);
+		}
+	}
+
+	private void printError(IBuildContext ctx, string? errorLineTask)
+	{
+		if (string.IsNullOrWhiteSpace(errorLineTask) == false)
+		{
+			ctx.log(LogLevel.ERROR, "MSVC", errorLineTask);
+		}
 	}
 }
 
