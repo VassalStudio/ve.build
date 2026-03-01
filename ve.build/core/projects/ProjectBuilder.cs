@@ -39,6 +39,7 @@ internal class ProjectBuilder : IProjectBuilder
 	private readonly List<File> _sourceFiles = new();
 	private readonly List<Action<File[]>> _sourceCallbacks = new();
 	private readonly List<Action<IReadOnlyDictionary<IProjectBuilder, bool>>> _dependencyCallbacks = new();
+	private Dictionary<IProjectBuilder, bool>? _deoendencies = null;
 
 	public IReadOnlyList<Action<IReadOnlyDictionary<IProjectBuilder, bool>>> DependencyCallbacks =>
 		this._dependencyCallbacks;
@@ -126,7 +127,14 @@ internal class ProjectBuilder : IProjectBuilder
 
 	public IProjectBuilder dependencies(Action<IReadOnlyDictionary<IProjectBuilder, bool>> dependencies)
 	{
-		this._dependencyCallbacks.Add(dependencies);
+		if (this._deoendencies != null)
+		{
+			dependencies(this._deoendencies);
+		}
+		else
+		{
+			this._dependencyCallbacks.Add(dependencies);
+		}
 		return this;
 	}
 
@@ -134,5 +142,15 @@ internal class ProjectBuilder : IProjectBuilder
 	{
 		this._sourceFiles.Add(f);
 		return this;
+	}
+
+	public void buildDependencies(Dictionary<IProjectBuilder, bool> deps)
+	{
+		foreach (var builder in this.DependencyCallbacks)
+		{
+			builder(deps);
+		}
+
+		this._deoendencies = deps;
 	}
 }

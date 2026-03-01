@@ -36,10 +36,8 @@ internal class Project
 		{
 			projectAction(this._builder);
 		}
-		foreach (var builder in this._builder.DependencyCallbacks)
-		{
-			builder(deps);
-		}
+
+		this._builder.buildDependencies(deps);
 
 		foreach (var callback in this._builder.SourceCallbacks)
 		{
