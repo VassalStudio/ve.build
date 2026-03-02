@@ -55,7 +55,7 @@ internal class MsvcLibConfigurator : ILibConfigurator
 		var exitProcessorTask = process.WaitForExitAsync();
 		while (true)
 		{
-			var completedTask = await Task.WhenAny(outputLineTask, errorLineTask, exitProcessorTask);
+			var completedTask = await Task.WhenAny(exitProcessorTask, outputLineTask, errorLineTask);
 			if (completedTask == errorLineTask)
 			{
 				this.printError(ctx, await errorLineTask);
@@ -80,8 +80,8 @@ internal class MsvcLibConfigurator : ILibConfigurator
 				{
 					this.printOutput(ctx, line);
 				}
+				break;
 			}
-			break;
 		}
 		if (process.ExitCode != 0)
 		{
