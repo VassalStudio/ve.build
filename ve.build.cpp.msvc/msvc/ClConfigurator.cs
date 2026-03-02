@@ -71,7 +71,7 @@ internal class BaseConfigurator : IClConfigurator
 		var exitProcessorTask = process.WaitForExitAsync();
 		while (true)
 		{
-			var completedTask = await Task.WhenAny(outputLineTask, errorLineTask, exitProcessorTask);
+			var completedTask = await Task.WhenAny(exitProcessorTask, outputLineTask, errorLineTask);
 			if (completedTask == errorLineTask)
 			{
 				var line = errorLineTask.Result;
@@ -473,17 +473,19 @@ internal class ShowDependenciesConfigurator : BaseConfigurator, IScanDependencie
 		var output = new StringBuilder();
 		while (true)
 		{
-			var completedTask = await Task.WhenAny(outputLineTask, errorLineTask, processExitTask);
+			var completedTask = await Task.WhenAny(processExitTask, outputLineTask, errorLineTask);
 			if (completedTask == errorLineTask)
 			{
 				var line = errorLineTask.Result;
 				this.handleErrorLine(ctx, line);
+				errorLineTask = process.StandardError.ReadLineAsync();
 			}
 			else if (completedTask == outputLineTask)
 			{
 				var line = outputLineTask.Result;
 				this.printOutput(ctx, line);
 				output.AppendLine(line);
+				outputLineTask = process.StandardOutput.ReadLineAsync();
 			}
 			else
 			{
@@ -519,12 +521,6 @@ internal class ShowDependenciesConfigurator : BaseConfigurator, IScanDependencie
 		{
 			ctx.log(LogLevel.DEBUG, "MSVC", $"Provided dependency module: {dep} at path {this.File.Path}");
 			this._providedDependencies.Add(dep, this.File.Path);
-			if (dep.Contains(':'))
-			{
-				var mainDep = dep.Split(':');
-				ctx.log(LogLevel.DEBUG, "MSVC", $"Detected dependency module: {mainDep[0]}");
-				this._dependencies.Add(mainDep[0]);
-			}
 		}
 		return process.ExitCode == 0 ? ActionResult.SUCCESS : ActionResult.FAILURE;
 	}
