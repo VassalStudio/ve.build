@@ -269,7 +269,7 @@ internal class Vcxproj2022(string file) : VcxprojGenerator("vs2022", "17.0", "v1
 			sln = Path.ChangeExtension(this.file, ".sln");
 		}
 		var csprojects = this.csProjects(sln, primaryCsproj).ToArray();
-		_ = taskBuilder.buildAction($"gsf:{sln}", $"Generate {sln}", () => this._projectFiles.Select(p => $"gpf:{Path.GetFileNameWithoutExtension(p)}"),
+		_ = taskBuilder.buildAction($"gsf:{sln}", $"Generate {sln}", d => d.makeGroup("gpf"),
 			async ctx =>
 			{
 				var configurations = ctx.Configurations.SelectMany(c => ctx.Platforms.Select(p => new KeyValuePair<string, string>(c switch
@@ -376,7 +376,7 @@ internal class Vcxproj2026(string file) : VcxprojGenerator("vs2026", "18.0", "v1
 			sln = Path.ChangeExtension(this.file, ".slnx");
 		}
 		var csprojects = this.csProjects(sln!, primaryCsproj).ToArray();
-		taskBuilder.buildAction($"gsf:{sln}", $"Generate {sln}", () => this._projectFiles.Select(p => $"gpf:{Path.GetFileNameWithoutExtension(p)}"),
+		taskBuilder.buildAction($"gsf:{sln}", $"Generate {sln}", d => d.makeGroup("gpf"),
 			async ctx =>
 			{
 				await using var filterStream = System.IO.File.Create(sln!);
