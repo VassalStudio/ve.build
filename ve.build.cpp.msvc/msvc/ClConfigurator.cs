@@ -501,7 +501,10 @@ internal class ShowDependenciesConfigurator : BaseConfigurator, IScanDependencie
 				foreach (var line in outputs.Split(Environment.NewLine).Prepend(outputLine))
 				{
 					this.printOutput(ctx, line);
-					output.AppendLine(line);
+					if (line != null && line.Trim([' ', '\t', '\n', '\r']).Length > 0)
+					{
+						output.AppendLine(line);
+					}
 				}
 				break;
 			}
