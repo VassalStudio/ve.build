@@ -30,31 +30,34 @@ internal class Dag
 		{
 			while (this.Nodes.Length > 0)
 			{
-				var readyToBuild = this.Nodes.Where(n => n.Dependencies.All(d => finishedNodes.Contains(d))).FirstOrDefault();
+				var nonFinished = this.Nodes.Select(n => n.Key).ToArray();
+				var deps = this.Nodes.Select(n => new DependencyBuilder(n, finishedNodes, nonFinished)).ToArray();
+				var readyToBuild = deps.FirstOrDefault(n => n.IsReady);
 				if (readyToBuild == null)
 				{
-					throw new Exception("Cyclic dependency detected in build graph");
+					foreach (var dep in deps)
+					{
+						dep.throwIfError();
+					}
+					throw new Exception("Cycle detected in module dependencies at tasks:\n" + string.Join('\n', deps.Select(d => d.Node.Name)));
 				}
-				var result = await this._makeTask(ctx, readyToBuild);
+				var result = await this._makeTask(ctx, readyToBuild.Node);
 				ctx.log(result.Value switch
 					{
 						ActionResult.SUCCESS => LogLevel.INFO,
 						ActionResult.SKIP => LogLevel.VERBOSE,
 						ActionResult.FAILURE => LogLevel.ERROR,
 						_ => throw new NotImplementedException(),
-					}, "BUILD", $"[{count - this.Nodes.Length + 1}/{count}] {readyToBuild.Name}");
-				if (result.Value == ActionResult.FAILURE)
-				{
-					throw new Exception("Build failed");
-				}
-				finishedNodes.Add(readyToBuild.Key);
-				this.Nodes = this.Nodes.Where(n => n != readyToBuild).ToArray();
+					}, "BUILD", $"[{count - this.Nodes.Length + 1}/{count}] {readyToBuild.Node.Name}");
+				finishedNodes.Add(readyToBuild.Node.Key);
+				this.Nodes = this.Nodes.Where(n => n != readyToBuild.Node).ToArray();
 			}
 		}
 		else
 		{
 			var completed = 0;
 			var activeWrappers = new List<Task<KeyValuePair<DagNode, ActionResult>>>();
+			var nonFinished = this.Nodes.Select(n => n.Key).ToList();
 			var whenAny = async () =>
 			{
 				var finishedTask = await Task.WhenAny(activeWrappers);
@@ -71,6 +74,7 @@ internal class Dag
 							_ => throw new NotImplementedException(),
 						}, "BUILD", $"[{completed}/{count}] {node.Name}");
 					finishedNodes.Add(node.Key);
+					nonFinished.Remove(node.Key);
 				}
 				catch (Exception ex)
 				{
@@ -80,9 +84,8 @@ internal class Dag
 			};
 			while (this.Nodes.Length > 0 || activeWrappers.Count > 0)
 			{
-				var readyToBuild = this.Nodes
-					.Where(n => n.Dependencies.All(d => finishedNodes.Contains(d)))
-					.ToArray();
+				var deps = this.Nodes.Select(n => new DependencyBuilder(n, finishedNodes, nonFinished)).ToArray();
+				var readyToBuild = deps.Where(n => n.IsReady).ToArray();
 				if (readyToBuild.Length == 0)
 				{
 					if (activeWrappers.Count > 0)
@@ -91,7 +94,11 @@ internal class Dag
 					}
 					else
 					{
-						throw new Exception("Cyclic dependency detected or logic error");
+						foreach (var dep in deps)
+						{
+							dep.throwIfError();
+						}
+						throw new Exception("Cycle detected in module dependencies at tasks:\n" + string.Join('\n', deps.Select(d => d.Node.Name)));
 					}
 				}
 				foreach (var node in readyToBuild)
@@ -100,9 +107,9 @@ internal class Dag
 					{
 						await whenAny();
 					}
-					activeWrappers.Add(this._makeTask(ctx, node));
+					activeWrappers.Add(this._makeTask(ctx, node.Node));
 				}
-				this.Nodes = this.Nodes.Where(n => !readyToBuild.Contains(n)).ToArray();
+				this.Nodes = this.Nodes.Where(n => readyToBuild.Any(r => r.Node.Equals(n)) == false).ToArray();
 			}
 		}
 	}

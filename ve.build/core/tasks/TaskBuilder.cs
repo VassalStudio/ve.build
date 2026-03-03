@@ -1,4 +1,5 @@
-﻿using ve.build.core.projects;
+﻿using ve.build.core.buildgraph;
+using ve.build.core.projects;
 
 using File = ve.build.core.files.File;
 
@@ -14,9 +15,9 @@ public interface ITaskBuilder
 {
 	ITaskBuilder dependsOf(string name);
 	ITaskBuilder eachProject(Action<IProjectBuilder> builderAction);
-	ITaskBuilder buildAction(string key, string name, Func<IEnumerable<string>> dependencies, Func<IBuildContext, ActionResult> buildAction);
-	ITaskBuilder buildAction(string key, string name, Func<IEnumerable<string>> dependencies, Func<IBuildContext, Task<ActionResult>> buildAction);
-	ITaskBuilder copy(File inputFile, File outputFile, Func<string[]> deps);
+	ITaskBuilder buildAction(string key, string name, Action<IDependencyBuilder> dependencies, Func<IBuildContext, ActionResult> buildAction);
+	ITaskBuilder buildAction(string key, string name, Action<IDependencyBuilder> dependencies, Func<IBuildContext, Task<ActionResult>> buildAction);
+	ITaskBuilder copy(File inputFile, File outputFile, Action<IDependencyBuilder> deps);
 	string Name { get; }
 	IBuildContext BuildContext { get; }
 }
@@ -47,19 +48,19 @@ internal class TaskBuilder : ITaskBuilder
 		return this;
 	}
 
-	public ITaskBuilder buildAction(string key, string name, Func<IEnumerable<string>> dependencies, Func<IBuildContext, Task<ActionResult>> buildAction)
+	public ITaskBuilder buildAction(string key, string name, Action<IDependencyBuilder> dependencies, Func<IBuildContext, Task<ActionResult>> buildAction)
 	{
 		this._task.makeBuildNode(key, name, dependencies, buildAction);
 		return this;
 	}
 
-	public ITaskBuilder buildAction(string key, string name, Func<IEnumerable<string>> dependencies, Func<IBuildContext, ActionResult> buildAction)
+	public ITaskBuilder buildAction(string key, string name, Action<IDependencyBuilder> dependencies, Func<IBuildContext, ActionResult> buildAction)
 	{
 		this._task.makeBuildNode(key, name, dependencies, buildAction);
 		return this;
 	}
 
-	public ITaskBuilder copy(File inputFile, File outputFile, Func<string[]> deps)
+	public ITaskBuilder copy(File inputFile, File outputFile, Action<IDependencyBuilder> deps)
 	{
 		var key = $"copy:{outputFile.Path}";
 		this.buildAction(key, $"Copy {inputFile.Path} to {outputFile.Path}", deps,

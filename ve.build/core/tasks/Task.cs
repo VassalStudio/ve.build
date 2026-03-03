@@ -28,7 +28,7 @@ internal class Task
 		{
 			foreach (var task in tasks)
 			{
-				node.makeDependencies(() => task.BuildNodes.Select(n => n.Key).ToArray());
+				node.makeDependencies(d => task.BuildNodes.ForEach(n => d.makeEqualDependency(n.Key)));
 			}
 		}
 		return this;
@@ -93,11 +93,11 @@ internal class Task
 		}
 	}
 
-	public void makeBuildNode(string key, string name, Func<IEnumerable<string>> dependencies, Func<IBuildContext, Task<ActionResult>> buildAction)
+	public void makeBuildNode(string key, string name, Action<IDependencyBuilder> dependencies, Func<IBuildContext, Task<ActionResult>> buildAction)
 	{
 		this.BuildNodes.Add(new DagNode(key, name, dependencies, buildAction));
 	}
-	public void makeBuildNode(string key, string name, Func<IEnumerable<string>> dependencies, Func<IBuildContext, ActionResult> buildAction)
+	public void makeBuildNode(string key, string name, Action<IDependencyBuilder> dependencies, Func<IBuildContext, ActionResult> buildAction)
 	{
 		this.makeBuildNode(key, name, dependencies, ctx =>
 		{
