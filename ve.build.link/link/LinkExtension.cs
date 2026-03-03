@@ -106,7 +106,20 @@ public static class LinkExtension
 	public static ITaskBuilder Link(this ITaskBuilder taskBuilder, File outputFile, Action<ILinkConfigurator> configurator, File[] files)
 	{
 		var key = $"link:{outputFile.Path}";
-		taskBuilder.buildAction(key, outputFile.Path, () => files.Select(f => f.SourceFile!.IsCpp() ? $"cl:{f.SourceFile!.Path}" : $"link:{f.SourceFile!.Path}"), buildContext =>
+		taskBuilder.buildAction(key, outputFile.Path, d =>
+		{
+			foreach (var f in files)
+			{
+				if (f.SourceFile!.IsCpp())
+				{
+					d.makeEqualDependency($"cl:{f.SourceFile!.Path}");
+				}
+				else
+				{
+					d.makeEqualDependency($"link:{f.SourceFile!.Path}");
+				}
+			}
+		}, buildContext =>
 		{
 			var link = buildContext.getTool<ILinkTool>();
 			var config = link.link(outputFile, files);
@@ -131,7 +144,20 @@ public static class LinkExtension
 	public static ITaskBuilder Lib(this ITaskBuilder taskBuilder, File outputFile, Action<ILibConfigurator> configurator, File[] files)
 	{
 		var key = $"lib:{outputFile.Path}";
-		taskBuilder.buildAction(key, outputFile.Path, () => files.Select(f => $"cl:{f.Path}").ToArray(), buildContext =>
+		taskBuilder.buildAction(key, outputFile.Path, d =>
+		{
+			foreach (var f in files)
+			{
+				if (f.IsCpp())
+				{
+					d.makeEqualDependency($"cl:{f.Path}");
+				}
+				else
+				{
+					d.makeEqualDependency($"link:{f.Path}");
+				}
+			}
+		}, buildContext =>
 		{
 			var link = buildContext.getTool<ILinkTool>();
 			var config = link.lib(outputFile, files);
@@ -176,10 +202,10 @@ public static class LinkExtension
 				tbuilder.eachProject(dp =>
 				{
 					var target = dp.outputFile(builder.Name + ".").changeExtension(FileType.SHARED_LIBRARY);
-					bool hasDependency = dp.Dependencies.Contains(builder.Name)/* || dp.PrivateDependencies.Contains(builder.Name)*/;
+					bool hasDependency = dp.Dependencies.Contains(builder.Name) || dp.PrivateDependencies.Contains(builder.Name);
 					if (hasDependency && string.Equals(outputFile.Path, target.Path) == false)
 					{
-						tbuilder.copy(outputFile, target, () => [$"link:{outputFile.Path}"]);
+						tbuilder.copy(outputFile, target, d => d.makeEqualDependency($"link:{outputFile.Path}"));
 					}
 				});
 			});
@@ -201,7 +227,8 @@ public static class LinkExtension
 						tbuilder.Link(outputFile, linkConfigurator, files);
 						break;
 				}
-			}))).task("clean", tbuilder => tbuilder.buildAction($"clean:{outputFile.Path}", $"Delete: {outputFile.Path}", () => [],
+			}))).task("clean", tbuilder => tbuilder.buildAction($"clean:{outputFile.Path}", $"Delete: {outputFile.Path}",
+			d => { },
 			ctx =>
 			{
 				var dps = Path.ChangeExtension(outputFile.Path, ".dps");
