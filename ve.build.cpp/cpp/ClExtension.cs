@@ -95,7 +95,7 @@ public static class ClExtension
 		var depsKey = $"deps:{inFile.Path}";
 		requires[inFile] = new();
 		includes[inFile] = new();
-		builder.buildAction(depsKey, $"Scan Dependencies: {inFile.Path}", () => [], async ctx =>
+		builder.buildAction(depsKey, $"Scan Dependencies: {inFile.Path}", d => { }, async ctx =>
 		{
 			var cpp = ctx.getTool<ICppTool>();
 			var deps = cpp.scanDependencies(inFile, objFile);
@@ -117,17 +117,25 @@ public static class ClExtension
 				requires[inFile].AddRange(deps.Dependencies);
 			}
 			return result;
-		}).buildAction(key, inFile.Path, () =>
+		}).buildAction(key, inFile.Path, d =>
 		{
+			d.makeGroup("deps");
 			lock (requires)
 			{
-				return requires[inFile].Select(r =>
+				foreach (var r in requires[inFile])
 				{
 					lock (depenencies)
 					{
-						return depenencies.TryGetValue(r, out var val) ? val : Guid.NewGuid().ToString();
+						if (depenencies.TryGetValue(r, out var val))
+						{
+							d.makeEqualDependency($"cl:{val}");
+						}
+						else
+						{
+							d.makeError($"Module not found: {r} for {inFile.Path}");
+						}
 					}
-				}).Select(r => $"cl:{r}").Prepend(depsKey);
+				}
 			}
 		}, async ctx =>
 		{
@@ -193,7 +201,8 @@ public static class ClExtension
 								configurator(cl);
 							});
 						}))
-					.task("clean", tbuild => tbuild.buildAction($"clean:{objFile.Path}", $"Delete: {objFile.Path}", () => [],
+					.task("clean", tbuild => tbuild.buildAction($"clean:{objFile.Path}", $"Delete: {objFile.Path}",
+						d => { },
 						ctx =>
 						{
 							var dps = Path.ChangeExtension(objFile.Path, ".dps");
