@@ -22,7 +22,13 @@ public static class ProjectGeneratorExtension
 							_selectedGenerator.setupProject(file);
 							taskBuilder.buildAction($"gpf:{projectBuilder.Name}",
 								$"Generates {file}",
-								() => projectBuilder.Dependencies.Select(d => $"gpf:{d}"),
+								d =>
+								{
+									foreach (var dep in deps)
+									{
+										d.makeEqualDependency($"gpf:{dep.Key.Name}");
+									}
+								},
 								ctx => _selectedGenerator!.generateProjectFiles(ctx, projectBuilder, files, deps.Keys));
 						})))))
 			);
