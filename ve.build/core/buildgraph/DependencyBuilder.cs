@@ -60,7 +60,6 @@ internal class DependencyBuilder : IDependencyBuilder
 
 internal abstract class Dependency(DependencyBuilder builder) : IDependency
 {
-	private Exception? _exception = null;
 	public abstract bool compile(IEnumerable<string> finished, IEnumerable<string> nonFinished);
 
 	protected void setError(string exception)

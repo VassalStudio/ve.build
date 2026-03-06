@@ -272,12 +272,12 @@ internal class Vcxproj2022(string file) : VcxprojGenerator("vs2022", "17.0", "v1
 		_ = taskBuilder.buildAction($"gsf:{sln}", $"Generate {sln}", d => d.makeGroup("gpf"),
 			async ctx =>
 			{
-				var configurations = ctx.Configurations.SelectMany(c => ctx.Platforms.Select(p => new KeyValuePair<string, string>(c switch
+				var configurations = ctx.Configurations.SelectMany(c => ctx.Platforms.Select(p => new KeyValuePair<string, string>((c switch
 				{
 					Configuration.DEBUG => "Debug",
 					Configuration.RELEASE => "Release",
-					_ => c.ToString().Select((c, i) => i == 0 ? Char.ToUpper(c) : Char.ToLower(c)).ToString()
-				}, p.Name))).ToArray();
+					_ => c.ToString().Select((ch, i) => i == 0 ? Char.ToUpper(ch) : Char.ToLower(ch)).ToString()
+				})!, p.Name))).ToArray();
 				using var writer = new StreamWriter(System.IO.File.Create(sln!));
 				await writer.WriteLineAsync("Microsoft Visual Studio Solution File, Format Version 12.00");
 				await writer.WriteLineAsync("# Visual Studio Version 17");
@@ -383,12 +383,12 @@ internal class Vcxproj2026(string file) : VcxprojGenerator("vs2026", "18.0", "v1
 				await new XDocument(
 					new XElement("Solution",
 						new XElement("Configurations",
-							ctx.Configurations.Select(c => new XElement("BuildType", new XAttribute("Name", c switch
+							ctx.Configurations.Select(c => new XElement("BuildType", new XAttribute("Name", (c switch
 							{
 								Configuration.DEBUG => "Debug",
 								Configuration.RELEASE => "Release",
-								_ => c.ToString().Select((c, i) => i == 0 ? Char.ToUpper(c) : Char.ToLower(c)).ToString()
-							}))),
+								_ => c.ToString().Select((ch, i) => i == 0 ? Char.ToUpper(ch) : Char.ToLower(ch)).ToString()
+							})!))),
 							ctx.Platforms.Select(p => new XElement("Platform", new XAttribute("Name", p.Name)))),
 						csprojects.Select(csproj => new XElement("Project",
 							new XAttribute("Path", csproj))),
