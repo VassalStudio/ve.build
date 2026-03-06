@@ -174,7 +174,14 @@ internal class BuildContext : IBuildContext
 				LogLevel.VERBOSE => ConsoleColor.DarkGray,
 				_ => Console.ForegroundColor
 			};
-			Console.WriteLine(finalMessage);
+			if (level <= LogLevel.WARN)
+			{
+				Console.Error.WriteLine(finalMessage);
+			}
+			else
+			{
+				Console.WriteLine(finalMessage);
+			}
 			Console.ForegroundColor = prevColor;
 #if DEBUG
 			Debug.WriteLine(finalMessage);

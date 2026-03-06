@@ -100,7 +100,14 @@ internal class MsvcLibConfigurator : ILibConfigurator
 				: (outputLineTask.Contains("error")
 					? LogLevel.ERROR
 					: (outputLineTask.Contains("warning") ? LogLevel.WARN : LogLevel.INFO));
-			ctx.log(level, "MSVC", outputLineTask);
+			if (level <= LogLevel.WARN)
+			{
+				Console.Error.WriteLine(outputLineTask);
+			}
+			else
+			{
+				Console.WriteLine(outputLineTask);
+			}
 		}
 	}
 
@@ -108,7 +115,7 @@ internal class MsvcLibConfigurator : ILibConfigurator
 	{
 		if (string.IsNullOrWhiteSpace(errorLineTask) == false)
 		{
-			ctx.log(LogLevel.ERROR, "MSVC", errorLineTask);
+			Console.Error.WriteLine(errorLineTask);
 		}
 	}
 }

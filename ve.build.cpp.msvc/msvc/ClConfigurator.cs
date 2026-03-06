@@ -112,7 +112,14 @@ internal class BaseConfigurator : IClConfigurator
 	{
 		if (string.IsNullOrWhiteSpace(line) == false && string.Equals(line, System.IO.Path.GetFileName(this.File.Path)) == false)
 		{
-			ctx.log(level, "MSVC", line);
+			if (level == LogLevel.ERROR || level == LogLevel.FATAL || level == LogLevel.WARN)
+			{
+				Console.Error.WriteLine(line);
+			}
+			else
+			{
+				Console.WriteLine(line);
+			}
 		}
 	}
 	protected void printOutput(IBuildContext ctx, string? line)
@@ -128,7 +135,7 @@ internal class BaseConfigurator : IClConfigurator
 	{
 		if (string.IsNullOrWhiteSpace(line) == false)
 		{
-			ctx.log(level, "MSVC", line);
+			Console.Error.WriteLine(line);
 		}
 	}
 
@@ -483,7 +490,6 @@ internal class ShowDependenciesConfigurator : BaseConfigurator, IScanDependencie
 			else if (completedTask == outputLineTask)
 			{
 				var line = outputLineTask.Result;
-				this.printOutput(ctx, line);
 				output.AppendLine(line);
 				outputLineTask = process.StandardOutput.ReadLineAsync();
 			}
@@ -500,7 +506,6 @@ internal class ShowDependenciesConfigurator : BaseConfigurator, IScanDependencie
 
 				foreach (var line in outputs.Split(Environment.NewLine).Prepend(outputLine))
 				{
-					this.printOutput(ctx, line);
 					if (line != null && line.Trim([' ', '\t', '\n', '\r']).Length > 0)
 					{
 						output.AppendLine(line);
@@ -530,7 +535,6 @@ internal class ShowDependenciesConfigurator : BaseConfigurator, IScanDependencie
 
 	private void handleErrorLine(IBuildContext ctx, string? line)
 	{
-		this.printError(ctx, line, LogLevel.VERBOSE);
 		if (string.IsNullOrWhiteSpace(line) == false && line.StartsWith("Note: including file:"))
 		{
 			var dep = line.Replace("Note: including file:", "").Trim();
