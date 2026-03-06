@@ -49,6 +49,10 @@ internal class Dag
 						ActionResult.FAILURE => LogLevel.ERROR,
 						_ => throw new NotImplementedException(),
 					}, "BUILD", $"[{count - this.Nodes.Length + 1}/{count}] {readyToBuild.Node.Name}");
+				if (result.Value == ActionResult.FAILURE)
+				{
+					throw new Exception($"Task {readyToBuild.Node.Name} failed");
+				}
 				finishedNodes.Add(readyToBuild.Node.Key);
 				this.Nodes = this.Nodes.Where(n => n != readyToBuild.Node).ToArray();
 			}
@@ -63,24 +67,20 @@ internal class Dag
 				var finishedTask = await Task.WhenAny(activeWrappers);
 				activeWrappers.Remove(finishedTask);
 				completed++;
-				try
+				var (node, result) = await finishedTask;
+				ctx.log(result switch
+					{
+						ActionResult.SUCCESS => LogLevel.INFO,
+						ActionResult.SKIP => LogLevel.VERBOSE,
+						ActionResult.FAILURE => LogLevel.ERROR,
+						_ => throw new NotImplementedException(),
+					}, "BUILD", $"[{completed}/{count}] {node.Name}");
+				finishedNodes.Add(node.Key);
+				if (result == ActionResult.FAILURE)
 				{
-					var (node, result) = await finishedTask;
-					ctx.log(result switch
-						{
-							ActionResult.SUCCESS => LogLevel.INFO,
-							ActionResult.SKIP => LogLevel.VERBOSE,
-							ActionResult.FAILURE => LogLevel.ERROR,
-							_ => throw new NotImplementedException(),
-						}, "BUILD", $"[{completed}/{count}] {node.Name}");
-					finishedNodes.Add(node.Key);
-					nonFinished.Remove(node.Key);
+					throw new Exception($"Task {node.Name} failed");
 				}
-				catch (Exception ex)
-				{
-					ctx.log(LogLevel.ERROR, "BUILD", $"Task failed: {ex.Message}");
-					throw;
-				}
+				nonFinished.Remove(node.Key);
 			};
 			while (this.Nodes.Length > 0 || activeWrappers.Count > 0)
 			{
